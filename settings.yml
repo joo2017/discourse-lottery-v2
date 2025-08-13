@@ -1,0 +1,19 @@
+plugins:
+  lottery_v2_enabled:
+    default: false
+    client: false
+  lottery_v2_trigger_categories:
+    default: ""
+    client: false
+    type: "string"
+  lottery_v2_trigger_tags:
+    default: ""
+    client: false
+    type: "string"
+  lottery_v2_floor_fallback:
+    default: "void"
+    client: false
+    type: "enum"
+    choices:
+      - void
+      - next
