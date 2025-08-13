@@ -1,0 +1,18 @@
+zh_CN:
+  site_settings:
+    lottery_v2_enabled: "启用新版抽奖插件 (V2)。"
+    lottery_v2_trigger_categories: "触发抽奖的分类ID，使用'|'分隔。留空则适用于所有分类。"
+    lottery_v2_trigger_tags: "触发抽奖的标签名，使用'|'分隔。留空则适用于所有标签。"
+    lottery_v2_floor_fallback: "当指定中奖楼层无效时的处理方式。"
+  lottery_v2:
+    draw_condition:
+      by_time: "开奖时间: %{time}"
+      by_reply: "回复达到 %{count} 时开奖"
+    draw_result:
+      title: "开奖结果"
+      winners_are: "恭喜以下用户中奖："
+      user: "中奖用户"
+      floor: "中奖楼层"
+    notification:
+      won_lottery_title: "您中奖啦！"
+      won_lottery: "恭喜您，您在主题 “%{topic_title}” 中赢得了 “%{lottery_name}” 抽奖活动！"
