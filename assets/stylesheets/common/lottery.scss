@@ -1,0 +1,60 @@
+.lottery-card {
+  border: 1px solid var(--primary-low);
+  background-color: var(--secondary-very-low);
+  padding: 1em;
+  margin-bottom: 1em;
+  border-radius: 5px;
+
+  h3 {
+    margin-top: 0;
+    color: var(--primary-medium);
+  }
+
+  .lottery-details {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5em 1em;
+    margin-bottom: 1em;
+
+    .label {
+      font-weight: bold;
+      color: var(--primary);
+    }
+  }
+
+  .lottery-status {
+    font-weight: bold;
+    font-size: var(--font-up-1);
+    padding: 0.5em;
+    border-radius: 3px;
+    text-align: center;
+    margin-bottom: 1em;
+
+    &.running {
+      background-color: var(--tertiary-low);
+      color: var(--tertiary);
+    }
+    &.finished {
+      background-color: var(--highlight-low);
+      color: var(--highlight);
+    }
+  }
+
+  .lottery-winners {
+    h4 {
+      margin-bottom: 0.5em;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      li {
+        padding: 0.25em 0;
+        border-bottom: 1px solid var(--primary-very-low);
+        &:last-child {
+          border-bottom: none;
+        }
+      }
+    }
+  }
+}
