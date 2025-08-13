@@ -6,10 +6,10 @@ class LotteryCreator
   end
 
   def create_from_template
+    return if Lottery.exists?(topic_id: @topic.id)
     raw = @post.raw
     params = parse_raw(raw)
-
-    return if params.empty?
+    return if params.values.any?(&:nil?)
 
     Lottery.create!(
       topic_id: @topic.id,
@@ -23,10 +23,8 @@ class LotteryCreator
       draw_reply_count: params[:draw_reply_count],
       specific_floors: params[:specific_floors],
       description: params[:description],
-      extra_info: params[:extra_info],
-      status: :running
+      extra_info: params[:extra_info]
     )
-
     add_tag("抽奖中")
   end
 
@@ -34,30 +32,29 @@ class LotteryCreator
 
   def parse_raw(raw)
     params = {}
-    params[:name] = raw.match(/\[lottery-name\](.*?)\[\/lottery-name\]/m)&.captures&.first&.strip
-    params[:prize] = raw.match(/\[lottery-prize\](.*?)\[\/lottery-prize\]/m)&.captures&.first&.strip
-    params[:winner_count] = raw.match(/\[lottery-winners\](.*?)\[\/lottery-winners\]/m)&.captures&.first&.to_i
+    params[:name] = raw[/\[lottery-name\](.*?)\[\/lottery-name\]/m, 1]&.strip
+    params[:prize] = raw[/\[lottery-prize\](.*?)\[\/lottery-prize\]/m, 1]&.strip
+    params[:winner_count] = raw[/\[lottery-winners\](.*?)\[\/lottery-winners\]/m, 1]&.to_i
     
-    draw_type_str = raw.match(/\[lottery-draw-type\](.*?)\[\/lottery-draw-type\]/m)&.captures&.first&.strip
+    draw_type_str = raw[/\[lottery-draw-type\](.*?)\[\/lottery-draw-type\]/m, 1]&.strip
     if draw_type_str == "时间开奖"
       params[:draw_type] = :by_time
-      draw_at_str = raw.match(/\[lottery-condition\](.*?)\[\/lottery-condition\]/m)&.captures&.first&.strip
+      draw_at_str = raw[/\[lottery-condition\](.*?)\[\/lottery-condition\]/m, 1]&.strip
       params[:draw_at] = Time.zone.parse(draw_at_str) rescue nil
     elsif draw_type_str == "回复数开奖"
       params[:draw_type] = :by_reply
-      params[:draw_reply_count] = raw.match(/\[lottery-condition\](.*?)\[\/lottery-condition\]/m)&.captures&.first&.to_i
+      params[:draw_reply_count] = raw[/\[lottery-condition\](.*?)\[\/lottery-condition\]/m, 1]&.to_i
     end
 
-    params[:specific_floors] = raw.match(/\[lottery-floors\](.*?)\[\/lottery-floors\]/m)&.captures&.first&.strip
-    params[:description] = raw.match(/\[lottery-description\](.*?)\[\/lottery-description\]/m)&.captures&.first&.strip
-    params[:extra_info] = raw.match(/\[lottery-extra\](.*?)\[\/lottery-extra\]/m)&.captures&.first&.strip
+    params[:specific_floors] = raw[/\[lottery-floors\](.*?)\[\/lottery-floors\]/m, 1]&.strip
+    params[:description] = raw[/\[lottery-description\](.*?)\[\/lottery-description\]/m, 1]&.strip
+    params[:extra_info] = raw[/\[lottery-extra\](.*?)\[\/lottery-extra\]/m, 1]&.strip
 
-    params.compact # Remove nil values
+    params
   end
 
   def add_tag(tag_name)
-    tag = Tag.find_or_create_by(name: tag_name)
-    @topic.tags << tag unless @topic.tags.include?(tag)
-    @topic.save!
+    tag = Tag.find_or_create_by!(name: tag_name)
+    DiscourseTagging.tag_topic_by_names(@topic, Guardian.new(Discourse.system_user), [tag_name])
   end
 end
