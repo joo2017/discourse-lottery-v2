@@ -5,7 +5,9 @@ class LotteryManager
   end
 
   def perform_draw
-    return unless @lottery.running?
+    # 使用常量和整数进行比较
+    return unless @lottery.status == Lottery::STATUSES[:running]
+    
     winners = find_winners
     return if winners.blank?
 
@@ -56,7 +58,8 @@ class LotteryManager
   end
 
   def update_lottery(winners)
-    @lottery.update!(status: :finished, winner_data: winners)
+    # 使用常量来更新状态
+    @lottery.update!(status: Lottery::STATUSES[:finished], winner_data: winners)
   end
 
   def announce_winners(winners)
