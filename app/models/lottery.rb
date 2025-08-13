@@ -4,12 +4,9 @@ class Lottery < ActiveRecord::Base
   belongs_to :topic
   belongs_to :user, foreign_key: :created_by_id
 
-  # --- START: 最终的语法修复 ---
-  # 使用最稳健的方式定义常量，不再使用 enum
   STATUSES = { running: 0, finished: 1, cancelled: 2 }.freeze
   DRAW_TYPES = { by_time: 1, by_reply: 2 }.freeze
 
-  # 手动实现与 enum 类似的功能
   def status_name
     STATUSES.key(self.status)
   end
@@ -17,7 +14,6 @@ class Lottery < ActiveRecord::Base
   def draw_type_name
     DRAW_TYPES.key(self.draw_type)
   end
-  # --- END: 最终的语法修复 ---
 
   validates :topic_id, presence: true, uniqueness: true
   validates :post_id, presence: true
@@ -25,7 +21,6 @@ class Lottery < ActiveRecord::Base
   validates :name, presence: true, length: { maximum: 255 }
   validates :prize, presence: true
   validates :winner_count, presence: true, numericality: { only_integer: true, greater_than: 0 }
-  # 确保 validates 也使用常量
   validates :draw_type, presence: true, inclusion: { in: DRAW_TYPES.values }
   validates :status, presence: true, inclusion: { in: STATUSES.values }
 
