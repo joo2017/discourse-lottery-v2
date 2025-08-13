@@ -1,0 +1,43 @@
+{{#if this.lotteryData}}
+  <div class="lottery-card">
+    <h3>{{this.lotteryData.name}}</h3>
+
+    {{#if this.isRunning}}
+      <div class="lottery-status running">
+        {{i18n "lottery_v2.status.running"}}
+      </div>
+    {{else if this.isFinished}}
+       <div class="lottery-status finished">
+        {{i18n "lottery_v2.status.finished"}}
+      </div>
+    {{/if}}
+
+    <div class="lottery-details">
+      <span class="label">{{i18n "lottery_v2.details.prize"}}:</span>
+      <span class="value">{{this.lotteryData.prize}}</span>
+
+      <span class="label">{{i18n "lottery_v2.details.winners_count"}}:</span>
+      <span class="value">{{this.lotteryData.winner_count}}</span>
+      
+      <span class="label">{{i18n "lottery_v2.details.draw_condition"}}:</span>
+      <span class="value">{{this.drawConditionText}}</span>
+
+      <span class="label">{{i18n "lottery_v2.details.participants"}}:</span>
+      <span class="value">{{this.lotteryData.participating_user_count}}</span>
+    </div>
+
+    {{#if this.isFinished}}
+      <div class="lottery-winners">
+        <h4>{{i18n "lottery_v2.draw_result.title"}}</h4>
+        <ul>
+          {{#each this.lotteryData.winner_data as |winner|}}
+            <li>
+              <a href="/u/{{winner.username}}" class="winner-username">{{winner.username}}</a>
+              <span class="winner-floor">#{{winner.post_number}}</span>
+            </li>
+          {{/each}}
+        </ul>
+      </div>
+    {{/if}}
+  </div>
+{{/if}}
