@@ -18,7 +18,7 @@ export default class LotteryCard extends Component {
   }
 
   get drawConditionText() {
-    if (this.lotteryData.draw_type === "by_time") {
+    if (this.lotteryData.draw_type === "by_time" && this.lotteryData.draw_at) {
       const date = new Date(this.lotteryData.draw_at);
       return I18n.t("lottery_v2.draw_condition.by_time", { time: date.toLocaleString() });
     } else if (this.lotteryData.draw_type === "by_reply") {
