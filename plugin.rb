@@ -1,6 +1,6 @@
 # name: discourse-lottery-v2
 # about: A modern, automated lottery plugin for Discourse.
-# version: 2.2.2
+# version: 2.2.3
 # authors: Your Name (Designed by AI)
 # url: null
 
@@ -11,15 +11,13 @@ register_asset "stylesheets/common/lottery.scss"
 after_initialize do
   # --- START: 最终的、绝对正确的修复 ---
   
-  # 将所有依赖加载放在 after_initialize 块的顶部
-  require_dependency File.expand_path('../app/models/lottery.rb', __FILE__)
-  require_dependency File.expand_path('../app/services/lottery_creator.rb', __FILE__)
-  require_dependency File.expand_path('../app/services/lottery_manager.rb', __FILE__)
-  require_dependency File.expand_path('../jobs/scheduled/check_lotteries.rb', __FILE__)
-  require_dependency File.expand_path('../jobs/regular/create_lottery_from_topic.rb', __FILE__)
-  require_dependency File.expand_path('../app/controllers/admin/lottery_admin_controller.rb', __FILE__)
-  
-  # 将 Topic 的关联关系也放在这里
+  # 移除所有手动的 require_dependency，让 Discourse 的自动加载机制来处理
+  # 这是最稳健的方式，避免了所有加载顺序问题
+
+  # Patch the Topic model to add a direct association
+  # 必须先加载 User 和 Topic
+  require_dependency 'user'
+  require_dependency 'topic'
   Topic.class_eval do
     has_one :lottery, class_name: "Lottery", dependent: :destroy
   end
