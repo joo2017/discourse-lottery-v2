@@ -6,9 +6,8 @@ class LotteryManager
 
   def perform_draw
     return unless @lottery.running?
-
     winners = find_winners
-    return if winners.empty?
+    return if winners.blank?
 
     update_lottery(winners)
     announce_winners(winners)
@@ -32,8 +31,7 @@ class LotteryManager
     posts = Post.where(topic_id: @topic.id, post_number: floors)
                 .where.not(user_id: @lottery.created_by_id)
                 .order(:post_number)
-
-    # Note: This simple version doesn't handle invalid floors. The fallback logic can be added here.
+    
     posts.map { |p| { user_id: p.user_id, username: p.user.username, post_number: p.post_number } }
   end
 
@@ -42,14 +40,18 @@ class LotteryManager
                        .where("post_number > 1")
                        .where.not(user_id: @lottery.created_by_id)
                        .order(:created_at)
-                       .select("DISTINCT ON (user_id) user_id, post_number")
+                       .distinct
+                       .pluck(:user_id, :post_number)
     
     return [] if participants.empty?
 
-    winners_data = participants.sample(@lottery.winner_count)
+    unique_participants = participants.uniq { |p| p[0] }
     
-    winners_data.map do |p|
-      { user_id: p.user_id, username: User.find(p.user_id).username, post_number: p.post_number }
+    winners_data = unique_participants.sample(@lottery.winner_count)
+    
+    User.where(id: winners_data.map(&:first)).map do |user|
+      post_number = winners_data.assoc(user.id)[1]
+      { user_id: user.id, username: user.username, post_number: post_number }
     end
   end
 
@@ -62,14 +64,9 @@ class LotteryManager
       "- @#{winner[:username]} (##{winner[:post_number]})"
     end.join("\n")
 
-    raw_content = I18n.t("lottery_v2.draw_result.title") + "\n\n" +
-                  I18n.t("lottery_v2.draw_result.winners_are") + "\n" +
-                  winner_list
-
-    PostCreator.new(Discourse.system_user,
-      topic_id: @topic.id,
-      raw: raw_content
-    ).create
+    raw_content = "#{I18n.t("lottery_v2.draw_result.title")}\n\n#{I18n.t("lottery_v2.draw_result.winners_are")}\n#{winner_list}"
+    
+    PostCreator.new(Discourse.system_user, topic_id: @topic.id, raw: raw_content).create
   end
 
   def send_notifications(winners)
@@ -78,17 +75,18 @@ class LotteryManager
         title: I18n.t("lottery_v2.notification.won_lottery_title"),
         raw: I18n.t("lottery_v2.notification.won_lottery", lottery_name: @lottery.name, topic_title: @topic.title, topic_url: @topic.url),
         archetype: Archetype.private_message,
-        target_usernames: winner[:username]
+        target_usernames: [winner[:username]]
       ).create
     end
   end
 
   def update_topic
+    existing_tags = @topic.tags.pluck(:name)
+    tags_to_add = (["已开奖"] + existing_tags).uniq
     tags_to_remove = ["抽奖中"]
-    tags_to_add = ["已开奖"]
     
-    DiscourseTagging.retag_topic_by_names(@topic, Tag.where(name: tags_to_remove), Tag.where(name: tags_to_add))
+    DiscourseTagging.retag_topic_by_names(@topic, Guardian.new(Discourse.system_user), tags_to_add - tags_to_remove)
     
-    @topic.update(closed: true, archived: false)
+    @topic.update(closed: true)
   end
 end
