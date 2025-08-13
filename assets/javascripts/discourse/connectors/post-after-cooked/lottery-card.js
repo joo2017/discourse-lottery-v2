@@ -10,14 +10,17 @@ export default class LotteryCard extends Component {
   }
 
   get isRunning() {
+    // 使用字符串进行比较
     return this.lotteryData.status === "running";
   }
 
   get isFinished() {
+    // 使用字符串进行比较
     return this.lotteryData.status === "finished";
   }
 
   get drawConditionText() {
+    // 使用字符串进行比较
     if (this.lotteryData.draw_type === "by_time" && this.lotteryData.draw_at) {
       const date = new Date(this.lotteryData.draw_at);
       return I18n.t("lottery_v2.draw_condition.by_time", { time: date.toLocaleString() });
