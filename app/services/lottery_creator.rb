@@ -6,24 +6,23 @@ class LotteryCreator
   end
 
   def create_from_template
-    Rails.logger.warn("LOTTERY_DEBUG: LotteryCreator service started for topic ##{@topic.id}.")
-    
     return if Lottery.exists?(topic_id: @topic.id)
     raw = @post.raw
     params = parse_raw(raw)
-
-    Rails.logger.warn("LOTTERY_DEBUG: Parsing post ##{@post.id}. Raw params extracted: #{params.inspect}")
-
+    
     required_keys = [:name, :prize, :winner_count, :draw_type]
     
     if required_keys.any? { |key| params[key].blank? }
-      Rails.logger.warn("LOTTERY_DEBUG: Required fields are missing for topic ##{@topic.id}. Params: #{params.inspect}. Aborting.")
+      Rails.logger.warn("LotteryCreator: Required fields are missing for topic ##{@topic.id}. Params: #{params.inspect}. Aborting.")
       return
     end
 
-    draw_condition_raw = raw[/### 开奖条件\n(.+?)\n\n/, 1]&.strip
-    if draw_condition_raw.blank?
-        Rails.logger.warn("LOTTERY_DEBUG: Draw condition is missing for topic ##{@topic.id}. Aborting.")
+    is_time_draw = params[:draw_type] == Lottery::DRAW_TYPES[:by_time]
+    is_reply_draw = params[:draw_type] == Lottery::DRAW_TYPES[:by_reply]
+    
+    draw_condition = raw[/### 开奖条件\n(.+?)\n\n/, 1]&.strip
+    if draw_condition.blank?
+        Rails.logger.warn("LotteryCreator: Draw condition is missing for topic ##{@topic.id}. Aborting.")
         return
     end
 
@@ -41,14 +40,14 @@ class LotteryCreator
       status: Lottery::STATUSES[:running]
     }
 
-    if params[:draw_type] == Lottery::DRAW_TYPES[:by_time]
-      lottery_params[:draw_at] = Time.zone.parse(draw_condition_raw) rescue nil
+    if is_time_draw
+      lottery_params[:draw_at] = Time.zone.parse(draw_condition) rescue nil
       unless lottery_params[:draw_at]
-        Rails.logger.warn("LOTTERY_DEBUG: Invalid date format for draw_condition: '#{draw_condition_raw}' in topic ##{@topic.id}. Aborting.")
+        Rails.logger.warn("LotteryCreator: Invalid date format for draw_condition: '#{draw_condition}' in topic ##{@topic.id}. Aborting.")
         return
       end
-    else # by_reply
-      lottery_params[:draw_reply_count] = draw_condition_raw.to_i
+    elsif is_reply_draw
+      lottery_params[:draw_reply_count] = draw_condition.to_i
     end
 
     if Lottery.create(lottery_params)
@@ -58,11 +57,8 @@ class LotteryCreator
 
   private
 
-  # --- START: 最终的解析逻辑修复 ---
   def parse_raw(raw)
     params = {}
-    
-    # 使用与表单模板输出完全匹配的 Markdown 标题格式来解析
     params[:name] = raw[/### 抽奖名称\n(.+?)\n\n/, 1]&.strip
     params[:prize] = raw[/### 活动奖品\n(.+?)\n\n/, 1]&.strip
     params[:winner_count] = raw[/### 获奖人数\n(.+?)\n\n/, 1]&.to_i
@@ -75,12 +71,10 @@ class LotteryCreator
     end
 
     params[:specific_floors] = raw[/### 指定中奖楼层 \(可选\)\n(.+?)\n\n/, 1]&.strip
-    params[:description] = raw[/### 简单说明 \(可见内容\)\n(.+?)\n\n/, 1]&.strip
+    params[:description] = raw[/### 简单说明 \(可选\)\n(.+?)\n\n/, 1]&.strip
     params[:extra_info] = raw[/### 其他说明 \(可选\)\n(.+?)\n\n/, 1]&.strip
-    
     params
   end
-  # --- END: 最终的解析逻辑修复 ---
 
   def add_tag(tag_name)
     tag = Tag.find_or_create_by!(name: tag_name)
