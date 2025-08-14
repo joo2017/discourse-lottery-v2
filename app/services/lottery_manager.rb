@@ -5,7 +5,6 @@ class LotteryManager
   end
 
   def perform_draw
-    # 使用常量和整数进行比较
     return unless @lottery.status == Lottery::STATUSES[:running]
     
     winners = find_winners
@@ -37,28 +36,30 @@ class LotteryManager
     posts.map { |p| { user_id: p.user_id, username: p.user.username, post_number: p.post_number } }
   end
 
+  # --- START: 最终的查询逻辑修复 ---
   def find_winners_by_random
-    participants = Post.where(topic_id: @topic.id)
-                       .where("post_number > 1")
-                       .where.not(user_id: @lottery.created_by_id)
-                       .order(:created_at)
-                       .distinct
-                       .pluck(:user_id, :post_number)
-    
-    return [] if participants.empty?
+    # 1. 找到所有有效回复，按时间排序
+    valid_posts = Post.where(topic_id: @topic.id)
+                      .where("post_number > 1")
+                      .where.not(user_id: @lottery.created_by_id)
+                      .order(:created_at)
 
-    unique_participants = participants.uniq { |p| p[0] }
+    return [] if valid_posts.empty?
+
+    # 2. 在 Ruby 中进行去重，确保每个用户只保留第一次的回复
+    unique_participants_posts = valid_posts.uniq(&:user_id)
     
-    winners_data = unique_participants.sample(@lottery.winner_count)
+    # 3. 从去重后的参与者中随机抽取中奖者
+    winners_posts = unique_participants_posts.sample(@lottery.winner_count)
     
-    User.where(id: winners_data.map(&:first)).map do |user|
-      post_number = winners_data.assoc(user.id)[1]
-      { user_id: user.id, username: user.username, post_number: post_number }
+    # 4. 格式化中奖者数据
+    winners_posts.map do |post|
+      { user_id: post.user_id, username: post.user.username, post_number: post.post_number }
     end
   end
+  # --- END: 最终的查询逻辑修复 ---
 
   def update_lottery(winners)
-    # 使用常量来更新状态
     @lottery.update!(status: Lottery::STATUSES[:finished], winner_data: winners)
   end
 
@@ -76,7 +77,7 @@ class LotteryManager
     winners.each do |winner|
       PostCreator.new(Discourse.system_user,
         title: I18n.t("lottery_v2.notification.won_lottery_title"),
-        raw: I18n.t("lottery_v2.notification.won_lottery", lottery_name: @lottery.name, topic_title: @topic.title, topic_url: @topic.url),
+        raw: I18n.t("lottery_v2.notification.won_lottery", lottery_name: @lottery.name, topic_title: @topic.title),
         archetype: Archetype.private_message,
         target_usernames: [winner[:username]]
       ).create
