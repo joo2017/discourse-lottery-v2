@@ -6,16 +6,9 @@ class LotteryCreator
   end
 
   def create_from_template
-    # --- START: 最终的逻辑修复 ---
-    # 使用更明确、更不可能出错的写法来检查是否已存在
-    if Lottery.find_by(topic_id: @topic.id)
-      Rails.logger.warn("LOTTERY_DEBUG: Lottery already exists for topic ##{@topic.id}. Aborting.")
-      return
-    end
-    # --- END: 最终的逻辑修复 ---
-
     Rails.logger.warn("LOTTERY_DEBUG: LotteryCreator service started for topic ##{@topic.id}.")
     
+    return if Lottery.exists?(topic_id: @topic.id)
     raw = @post.raw
     params = parse_raw(raw)
 
@@ -60,14 +53,16 @@ class LotteryCreator
 
     if Lottery.create(lottery_params)
       add_tag("抽奖中")
-      Rails.logger.warn("LOTTERY_DEBUG: Successfully created lottery for topic ##{@topic.id}")
     end
   end
 
   private
 
+  # --- START: 最终的解析逻辑修复 ---
   def parse_raw(raw)
     params = {}
+    
+    # 使用与表单模板输出完全匹配的 Markdown 标题格式来解析
     params[:name] = raw[/### 抽奖名称\n(.+?)\n\n/, 1]&.strip
     params[:prize] = raw[/### 活动奖品\n(.+?)\n\n/, 1]&.strip
     params[:winner_count] = raw[/### 获奖人数\n(.+?)\n\n/, 1]&.to_i
@@ -82,8 +77,10 @@ class LotteryCreator
     params[:specific_floors] = raw[/### 指定中奖楼层 \(可选\)\n(.+?)\n\n/, 1]&.strip
     params[:description] = raw[/### 简单说明 \(可见内容\)\n(.+?)\n\n/, 1]&.strip
     params[:extra_info] = raw[/### 其他说明 \(可选\)\n(.+?)\n\n/, 1]&.strip
+    
     params
   end
+  # --- END: 最终的解析逻辑修复 ---
 
   def add_tag(tag_name)
     tag = Tag.find_or_create_by!(name: tag_name)
