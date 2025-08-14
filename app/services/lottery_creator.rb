@@ -6,36 +6,21 @@ class LotteryCreator
   end
 
   def create_from_template
+    Rails.logger.warn("LOTTERY_DEBUG: LotteryCreator service started for topic ##{@topic.id}.")
+    
     return if Lottery.exists?(topic_id: @topic.id)
     raw = @post.raw
     params = parse_raw(raw)
-    
-    # --- 关键校验逻辑修正 ---
-    # 1. 定义必填字段的键
-    required_keys = [:name, :prize, :winner_count, :draw_type]
-    
-    # 2. 检查必填字段是否有任何一个为 nil 或为空
+
+    Rails.logger.warn("LOTTERY_DEBUG: Parsing post ##{@post.id}. Raw params extracted: #{params.inspect}")
+
+    required_keys = [:name, :prize, :winner_count, :draw_type, :draw_condition]
     if required_keys.any? { |key| params[key].blank? }
-      Rails.logger.warn("LotteryCreator: Required fields are missing. Params: #{params.inspect}. Aborting.")
+      Rails.logger.warn("LOTTERY_DEBUG: One or more required params are missing or blank. Aborting lottery creation.")
       return
     end
 
-    # 3. 额外检查依赖于开奖类型的条件是否有效
-    is_time_draw = params[:draw_type] == Lottery::DRAW_TYPES[:by_time]
-    is_reply_draw = params[:draw_type] == Lottery::DRAW_TYPES[:by_reply]
-
-    if is_time_draw && params[:draw_at].nil?
-      Rails.logger.warn("LotteryCreator: Draw type is by_time but draw_at is nil. Aborting.")
-      return
-    end
-
-    if is_reply_draw && params[:draw_reply_count].nil?
-      Rails.logger.warn("LotteryCreator: Draw type is by_reply but draw_reply_count is nil. Aborting.")
-      return
-    end
-    # --- 校验逻辑修正结束 ---
-
-    lottery = Lottery.new(
+    lottery_params = {
       topic_id: @topic.id,
       post_id: @post.id,
       created_by_id: @user.id,
@@ -43,45 +28,54 @@ class LotteryCreator
       prize: params[:prize],
       winner_count: params[:winner_count],
       draw_type: params[:draw_type],
-      draw_at: params[:draw_at],
-      draw_reply_count: params[:draw_reply_count],
       specific_floors: params[:specific_floors],
       description: params[:description],
       extra_info: params[:extra_info],
       status: Lottery::STATUSES[:running]
-    )
-    
-    if lottery.save
-      add_tag("抽奖中")
-    else
-      Rails.logger.error("Lottery creation failed for topic #{@topic.id}: #{lottery.errors.full_messages.join(', ')}")
+    }
+
+    if params[:draw_type] == Lottery::DRAW_TYPES[:by_time]
+      lottery_params[:draw_at] = Time.zone.parse(params[:draw_condition]) rescue nil
+      unless lottery_params[:draw_at]
+        Rails.logger.warn("LOTTERY_DEBUG: Invalid date format for draw_condition: '#{params[:draw_condition]}'. Aborting.")
+        return
+      end
+    else # by_reply
+      lottery_params[:draw_reply_count] = params[:draw_condition]&.to_i
     end
+
+    Lottery.create!(lottery_params)
+    add_tag("抽奖中")
+    Rails.logger.warn("LOTTERY_DEBUG: Successfully created lottery for topic ##{@topic.id}")
   end
 
   private
 
+  # --- START: 最终的解析逻辑修复 ---
   def parse_raw(raw)
     params = {}
-    params[:name] = raw[/\[lottery-name\](.*?)\[\/lottery-name\]/m, 1]&.strip
-    params[:prize] = raw[/\[lottery-prize\](.*?)\[\/lottery-prize\]/m, 1]&.strip
-    params[:winner_count] = raw[/\[lottery-winners\](.*?)\[\/lottery-winners\]/m, 1]&.to_i
     
-    draw_type_str = raw[/\[lottery-draw-type\](.*?)\[\/lottery-draw-type\]/m, 1]&.strip
+    # 使用与表单模板输出完全匹配的 Markdown 标题格式来解析
+    params[:name] = raw[/### 抽奖名称\n(.+)/m, 1]&.strip
+    params[:prize] = raw[/### 活动奖品\n(.+)/m, 1]&.strip
+    params[:winner_count] = raw[/### 获奖人数\n(.+)/m, 1]&.to_i
+    
+    draw_type_str = raw[/### 开奖方式\n(.+)/m, 1]&.strip
+    params[:draw_condition] = raw[/### 开奖条件\n(.+)/m, 1]&.strip
+    
     if draw_type_str == "时间开奖"
       params[:draw_type] = Lottery::DRAW_TYPES[:by_time]
-      draw_at_str = raw[/\[lottery-condition\](.*?)\[\/lottery-condition\]/m, 1]&.strip
-      params[:draw_at] = Time.zone.parse(draw_at_str) rescue nil
     elsif draw_type_str == "回复数开奖"
       params[:draw_type] = Lottery::DRAW_TYPES[:by_reply]
-      params[:draw_reply_count] = raw[/\[lottery-condition\](.*?)\[\/lottery-condition\]/m, 1]&.to_i
     end
 
-    params[:specific_floors] = raw[/\[lottery-floors\](.*?)\[\/lottery-floors\]/m, 1]&.strip
-    params[:description] = raw[/\[lottery-description\](.*?)\[\/lottery-description\]/m, 1]&.strip
-    params[:extra_info] = raw[/\[lottery-extra\](.*?)\[\/lottery-extra\]/m, 1]&.strip
-
+    params[:specific_floors] = raw[/### 指定中奖楼层 \(可选\)\n(.+)/m, 1]&.strip
+    params[:description] = raw[/### 简单说明 \(可见内容\)\n(.+)/m, 1]&.strip
+    params[:extra_info] = raw[/### 其他说明 \(可选\)\n(.+)/m, 1]&.strip
+    
     params
   end
+  # --- END: 最终的解析逻辑修复 ---
 
   def add_tag(tag_name)
     tag = Tag.find_or_create_by!(name: tag_name)
