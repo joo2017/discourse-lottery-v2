@@ -36,9 +36,7 @@ class LotteryManager
     posts.map { |p| { user_id: p.user_id, username: p.user.username, post_number: p.post_number } }
   end
 
-  # --- START: 最终的查询逻辑修复 ---
   def find_winners_by_random
-    # 1. 找到所有有效回复，按时间排序
     valid_posts = Post.where(topic_id: @topic.id)
                       .where("post_number > 1")
                       .where.not(user_id: @lottery.created_by_id)
@@ -46,18 +44,14 @@ class LotteryManager
 
     return [] if valid_posts.empty?
 
-    # 2. 在 Ruby 中进行去重，确保每个用户只保留第一次的回复
     unique_participants_posts = valid_posts.uniq(&:user_id)
     
-    # 3. 从去重后的参与者中随机抽取中奖者
     winners_posts = unique_participants_posts.sample(@lottery.winner_count)
     
-    # 4. 格式化中奖者数据
     winners_posts.map do |post|
       { user_id: post.user_id, username: post.user.username, post_number: post.post_number }
     end
   end
-  # --- END: 最终的查询逻辑修复 ---
 
   def update_lottery(winners)
     @lottery.update!(status: Lottery::STATUSES[:finished], winner_data: winners)
@@ -84,13 +78,22 @@ class LotteryManager
     end
   end
 
+  # --- START: 最终的 API 修复 ---
   def update_topic
-    existing_tags = @topic.tags.pluck(:name)
-    tags_to_add = (["已开奖"] + existing_tags).uniq
-    tags_to_remove = ["抽奖中"]
+    # 使用现代 Discourse 推荐的 TopicTag Guardian 来修改标签
+    guardian = Guardian.new(Discourse.system_user)
+    tag_names = @topic.tags.pluck(:name) - ["抽奖中"] + ["已开奖"]
     
-    DiscourseTagging.retag_topic_by_names(@topic, Guardian.new(Discourse.system_user), tags_to_add - tags_to_remove)
+    TopicTag.transaction do
+      @topic.topic_tags.destroy_all
+      tag_names.uniq.each do |name|
+        tag = Tag.find_or_create_by_name(name)
+        TopicTag.create!(topic: @topic, tag: tag)
+      end
+    end
     
+    # 锁定主题
     @topic.update(closed: true)
   end
+  # --- END: 最终的 API 修复 ---
 end
