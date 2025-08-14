@@ -1,6 +1,6 @@
 # name: discourse-lottery-v2
 # about: A modern, automated lottery plugin for Discourse.
-# version: 2.2.5
+# version: 2.2.6
 # authors: Your Name (Designed by AI)
 # url: null
 
@@ -51,23 +51,29 @@ after_initialize do
     end
   end
 
-  add_to_serializer(:topic_view, :lottery_data, false) do
-    lottery = object.topic&.lottery
-    return nil unless lottery
-    lottery.as_json(
-      only: [
-        :name, :prize, :winner_count, :draw_type, :draw_at,
-        :draw_reply_count, :specific_floors, :description,
-        :extra_info, :status, :winner_data
-      ],
-      methods: [:participating_user_count]
-    ).merge(
-      status: lottery.status_name.to_s,
-      draw_type: lottery.draw_type_name.to_s
-    )
-  end
+  require_dependency "topic_view_serializer"
+  class ::TopicViewSerializer
+    attributes :lottery_data
 
-  add_to_serializer(:topic_view, :include_lottery_data?) do
-    object.topic&.lottery.present?
+    def lottery_data
+      lottery = object.topic.lottery
+      return nil unless lottery
+
+      lottery.as_json(
+        only: [
+          :name, :prize, :winner_count, :draw_type, :draw_at,
+          :draw_reply_count, :specific_floors, :description,
+          :extra_info, :status, :winner_data
+        ],
+        methods: [:participating_user_count]
+      ).merge(
+        status: lottery.status_name.to_s,
+        draw_type: lottery.draw_type_name.to_s
+      )
+    end
+    
+    def include_lottery_data?
+      object.topic.lottery.present?
+    end
   end
 end
