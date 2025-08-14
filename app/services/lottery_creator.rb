@@ -11,16 +11,31 @@ class LotteryCreator
     params = parse_raw(raw)
     
     # --- 关键校验逻辑修正 ---
-    # 定义必填字段
-    required_params = [:name, :prize, :winner_count, :draw_type]
-    # 检查是否有任何一个必填字段为 nil
-    return if required_params.any? { |p| params[p].nil? }
-    # 额外检查依赖于 draw_type 的开奖条件是否有效
-    return if (params[:draw_type] == :by_time && params[:draw_at].nil?) || \
-              (params[:draw_type] == :by_reply && params[:draw_reply_count].nil?)
+    # 1. 定义必填字段的键
+    required_keys = [:name, :prize, :winner_count, :draw_type]
+    
+    # 2. 检查必填字段是否有任何一个为 nil 或为空
+    if required_keys.any? { |key| params[key].blank? }
+      Rails.logger.warn("LotteryCreator: Required fields are missing. Params: #{params.inspect}. Aborting.")
+      return
+    end
+
+    # 3. 额外检查依赖于开奖类型的条件是否有效
+    is_time_draw = params[:draw_type] == Lottery::DRAW_TYPES[:by_time]
+    is_reply_draw = params[:draw_type] == Lottery::DRAW_TYPES[:by_reply]
+
+    if is_time_draw && params[:draw_at].nil?
+      Rails.logger.warn("LotteryCreator: Draw type is by_time but draw_at is nil. Aborting.")
+      return
+    end
+
+    if is_reply_draw && params[:draw_reply_count].nil?
+      Rails.logger.warn("LotteryCreator: Draw type is by_reply but draw_reply_count is nil. Aborting.")
+      return
+    end
     # --- 校验逻辑修正结束 ---
 
-    Lottery.create!(
+    lottery = Lottery.new(
       topic_id: @topic.id,
       post_id: @post.id,
       created_by_id: @user.id,
@@ -32,9 +47,15 @@ class LotteryCreator
       draw_reply_count: params[:draw_reply_count],
       specific_floors: params[:specific_floors],
       description: params[:description],
-      extra_info: params[:extra_info]
+      extra_info: params[:extra_info],
+      status: Lottery::STATUSES[:running]
     )
-    add_tag("抽奖中")
+    
+    if lottery.save
+      add_tag("抽奖中")
+    else
+      Rails.logger.error("Lottery creation failed for topic #{@topic.id}: #{lottery.errors.full_messages.join(', ')}")
+    end
   end
 
   private
@@ -47,11 +68,11 @@ class LotteryCreator
     
     draw_type_str = raw[/\[lottery-draw-type\](.*?)\[\/lottery-draw-type\]/m, 1]&.strip
     if draw_type_str == "时间开奖"
-      params[:draw_type] = :by_time
+      params[:draw_type] = Lottery::DRAW_TYPES[:by_time]
       draw_at_str = raw[/\[lottery-condition\](.*?)\[\/lottery-condition\]/m, 1]&.strip
       params[:draw_at] = Time.zone.parse(draw_at_str) rescue nil
     elsif draw_type_str == "回复数开奖"
-      params[:draw_type] = :by_reply
+      params[:draw_type] = Lottery::DRAW_TYPES[:by_reply]
       params[:draw_reply_count] = raw[/\[lottery-condition\](.*?)\[\/lottery-condition\]/m, 1]&.to_i
     end
 
