@@ -53,4 +53,4 @@ after_initialize do
   end
 
   Topic.class_eval { has_one :lottery, class_name: "Lottery", dependent: :destroy }
-end```
+end
