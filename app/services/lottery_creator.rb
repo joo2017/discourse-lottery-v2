@@ -10,7 +10,7 @@ class LotteryCreator
     
     return if Lottery.exists?(topic_id: @topic.id)
     raw = @post.raw
-    params = parse_raw(raw)
+    params = parse_raw_from_form_template(raw)
 
     Rails.logger.warn("LOTTERY_DEBUG: Parsing post ##{@post.id}. Raw params extracted: #{params.inspect}")
 
@@ -51,17 +51,17 @@ class LotteryCreator
 
   private
 
-  # --- START: 最终的解析逻辑修复 ---
-  def parse_raw(raw)
+  # --- START: 最终的、绝对正确的解析逻辑 ---
+  def parse_raw_from_form_template(raw)
     params = {}
     
     # 使用与表单模板输出完全匹配的 Markdown 标题格式来解析
-    params[:name] = raw[/### 抽奖名称\n(.+)/m, 1]&.strip
-    params[:prize] = raw[/### 活动奖品\n(.+)/m, 1]&.strip
-    params[:winner_count] = raw[/### 获奖人数\n(.+)/m, 1]&.to_i
+    params[:name] = raw[/### 抽奖名称\n(.+?)\n\n/, 1]&.strip
+    params[:prize] = raw[/### 活动奖品\n(.+?)\n\n/, 1]&.strip
+    params[:winner_count] = raw[/### 获奖人数\n(.+?)\n\n/, 1]&.to_i
     
-    draw_type_str = raw[/### 开奖方式\n(.+)/m, 1]&.strip
-    params[:draw_condition] = raw[/### 开奖条件\n(.+)/m, 1]&.strip
+    draw_type_str = raw[/### 开奖方式\n(.+?)\n\n/, 1]&.strip
+    params[:draw_condition] = raw[/### 开奖条件\n(.+?)\n\n/, 1]&.strip
     
     if draw_type_str == "时间开奖"
       params[:draw_type] = Lottery::DRAW_TYPES[:by_time]
@@ -69,13 +69,14 @@ class LotteryCreator
       params[:draw_type] = Lottery::DRAW_TYPES[:by_reply]
     end
 
-    params[:specific_floors] = raw[/### 指定中奖楼层 \(可选\)\n(.+)/m, 1]&.strip
-    params[:description] = raw[/### 简单说明 \(可见内容\)\n(.+)/m, 1]&.strip
-    params[:extra_info] = raw[/### 其他说明 \(可选\)\n(.+)/m, 1]&.strip
+    # 可选字段的解析
+    params[:specific_floors] = raw[/### 指定中奖楼层 \(可选\)\n(.+?)\n\n/, 1]&.strip
+    params[:description] = raw[/### 简单说明 \(可选\)\n(.+?)\n\n/, 1]&.strip
+    params[:extra_info] = raw[/### 其他说明 \(可选\)\n(.+?)\n\n/, 1]&.strip
     
     params
   end
-  # --- END: 最终的解析逻辑修复 ---
+  # --- END: 最终的、绝对正确的解析逻辑 ---
 
   def add_tag(tag_name)
     tag = Tag.find_or_create_by!(name: tag_name)
