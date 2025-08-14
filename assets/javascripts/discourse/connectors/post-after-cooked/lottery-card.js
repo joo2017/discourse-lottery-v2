@@ -5,22 +5,27 @@ import I18n from "I18n";
 export default class LotteryCard extends Component {
   @service site;
 
+  constructor() {
+    super(...arguments);
+    const lotteryData = this.args.outletArgs.model.topic.lottery_data;
+    console.warn("LOTTERY_FRONTEND_DEBUG: LotteryCard component is being initialized. Received lottery_data:", lotteryData);
+  }
+
   get lotteryData() {
     return this.args.outletArgs.model.topic.lottery_data;
   }
 
   get isRunning() {
-    // 使用字符串进行比较
-    return this.lotteryData.status === "running";
+    return this.lotteryData && this.lotteryData.status === "running";
   }
 
   get isFinished() {
-    // 使用字符串进行比较
-    return this.lotteryData.status === "finished";
+    return this.lotteryData && this.lotteryData.status === "finished";
   }
 
   get drawConditionText() {
-    // 使用字符串进行比较
+    if (!this.lotteryData) return "";
+    
     if (this.lotteryData.draw_type === "by_time" && this.lotteryData.draw_at) {
       const date = new Date(this.lotteryData.draw_at);
       return I18n.t("lottery_v2.draw_condition.by_time", { time: date.toLocaleString() });
