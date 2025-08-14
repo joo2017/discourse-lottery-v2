@@ -1,3 +1,5 @@
+# /var/discourse/plugins/discourse-lottery-v2/plugin.rb (已修正语法错误)
+
 # name: discourse-lottery-v2
 # about: A modern, automated lottery plugin for Discourse.
 # version: 2.2.1
@@ -25,4 +27,27 @@ after_initialize do
       category_match = trigger_categories.empty? || trigger_categories.include?(topic.category_id)
       tags_match = trigger_tags.empty? || !((topic.tags.map(&:name).map(&:downcase) & trigger_tags).empty?)
 
-      if catego
+      # --- 这就是之前被截断的、导致错误的一行代码 ---
+      if category_match && tags_match
+        Jobs.enqueue(:create_lottery_from_topic, topic_id: topic.id)
+      end # 这个 end 对应上面的 if
+    end # 这个 end 对应 if SiteSetting.lottery_v2_enabled
+  end # 这个 end 对应 on(:topic_created)
+
+  add_to_serializer(:topic_view, :lottery_data, false) do
+    Lottery.find_by(topic_id: object.topic.id)&.as_json(
+      only: [
+        :name, :prize, :winner_count, :draw_type, :draw_at,
+        :draw_reply_count, :specific_floors, :description,
+        :extra_info, :status, :winner_data
+      ],
+      methods: [:participating_user_count]
+    )
+  end
+
+  add_to_serializer(:topic_view, :include_lottery_data?) do
+    object.topic&.lottery.present?
+  end
+
+  Topic.class_eval { has_one :lottery, class_name: "Lottery", dependent: :destroy }
+end
