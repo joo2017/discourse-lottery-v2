@@ -5,12 +5,6 @@ import I18n from "I18n";
 export default class LotteryCard extends Component {
   @service site;
 
-  constructor() {
-    super(...arguments);
-    const lotteryData = this.args.outletArgs.model.topic.lottery_data;
-    console.warn("LOTTERY_FRONTEND_DEBUG: LotteryCard component is being initialized. Received lottery_data:", lotteryData);
-  }
-
   get lotteryData() {
     return this.args.outletArgs.model.topic.lottery_data;
   }
