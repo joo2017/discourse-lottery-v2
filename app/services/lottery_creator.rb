@@ -51,17 +51,14 @@ class LotteryCreator
 
   private
 
-  # --- START: 最终的解析逻辑修复 ---
   def parse_raw(raw)
     params = {}
+    params[:name] = raw[/\[lottery-name\](.*?)\[\/lottery-name\]/m, 1]&.strip
+    params[:prize] = raw[/\[lottery-prize\](.*?)\[\/lottery-prize\]/m, 1]&.strip
+    params[:winner_count] = raw[/\[lottery-winners\](.*?)\[\/lottery-winners\]/m, 1]&.to_i
     
-    # 使用与表单模板输出完全匹配的 Markdown 标题格式来解析
-    params[:name] = raw[/### 抽奖名称\n(.+)/, 1]&.strip
-    params[:prize] = raw[/### 活动奖品\n(.+)/, 1]&.strip
-    params[:winner_count] = raw[/### 获奖人数\n(.+)/, 1]&.to_i
-    
-    draw_type_str = raw[/### 开奖方式\n(.+)/, 1]&.strip
-    params[:draw_condition] = raw[/### 开奖条件\n(.+)/, 1]&.strip
+    draw_type_str = raw[/\[lottery-draw-type\](.*?)\[\/lottery-draw-type\]/m, 1]&.strip
+    params[:draw_condition] = raw[/\[lottery-condition\](.*?)\[\/lottery-condition\]/m, 1]&.strip
     
     if draw_type_str == "时间开奖"
       params[:draw_type] = Lottery::DRAW_TYPES[:by_time]
@@ -69,13 +66,12 @@ class LotteryCreator
       params[:draw_type] = Lottery::DRAW_TYPES[:by_reply]
     end
 
-    params[:specific_floors] = raw[/### 指定中奖楼层 \(可选\)\n(.+)/, 1]&.strip
-    params[:description] = raw[/### 简单说明 \(可选\)\n(.+)/, 1]&.strip
-    params[:extra_info] = raw[/### 其他说明 \(可选\)\n(.+)/, 1]&.strip
-    
+    params[:specific_floors] = raw[/\[lottery-floors\](.*?)\[\/lottery-floors\]/m, 1]&.strip
+    params[:description] = raw[/\[lottery-description\](.*?)\[\/lottery-description\]/m, 1]&.strip
+    params[:extra_info] = raw[/\[lottery-extra\](.*?)\[\/lottery-extra\]/m, 1]&.strip
+
     params
   end
-  # --- END: 最终的解析逻辑修复 ---
 
   def add_tag(tag_name)
     tag = Tag.find_or_create_by!(name: tag_name)
