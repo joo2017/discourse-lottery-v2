@@ -15,6 +15,21 @@ class Lottery < ActiveRecord::Base
     DRAW_TYPES.key(self.draw_type)
   end
 
+  # --- START: 最终的逻辑修复 ---
+  # 添加更明确、更不容易出错的检查方法
+  def is_running?
+    self.status == STATUSES[:running]
+  end
+
+  def is_draw_by_time?
+    self.draw_type == DRAW_TYPES[:by_time]
+  end
+
+  def is_draw_by_reply?
+    self.draw_type == DRAW_TYPES[:by_reply]
+  end
+  # --- END: 最终的逻辑修复 ---
+
   validates :topic_id, presence: true, uniqueness: true
   validates :post_id, presence: true
   validates :created_by_id, presence: true
