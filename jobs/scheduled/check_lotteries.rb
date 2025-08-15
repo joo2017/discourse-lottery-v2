@@ -3,51 +3,37 @@ module Jobs
     every 1.minute
 
     def execute(args)
-      Rails.logger.warn("LOTTERY_DEBUG: [CheckLotteries Job] Starting check...")
-      
-      running_lotteries = Lottery.where(status: Lottery::STATUSES[:running])
-      
-      Rails.logger.warn("LOTTERY_DEBUG: [CheckLotteries Job] Found #{running_lotteries.count} running lotteries.")
+      # 查询所有状态为 'running' 的抽奖
+      running_lotteries = Lottery.running
+
+      # 只有在确实有正在进行的抽奖时，才进行下一步的迭代处理
+      # 这样可以避免在没有抽奖时进行不必要的数据库查询
+      return if running_lotteries.empty?
 
       running_lotteries.find_each do |lottery|
         begin
-          topic = lottery.topic
-          unless topic
-            Rails.logger.warn("LOTTERY_DEBUG: [CheckLotteries Job] Skipping lottery ##{lottery.id} because its topic has been deleted.")
-            next
-          end
-
-          Rails.logger.warn("LOTTERY_DEBUG: [CheckLotteries Job] Checking lottery ##{lottery.id} for topic ##{topic.id} ('#{topic.title}').")
-
-          should_draw = false
+          # 检查抽奖条件是否满足
+          should_draw = if lottery.by_time? && lottery.draw_at
+                          Time.zone.now >= lottery.draw_at
+                        elsif lottery.by_reply? && lottery.draw_reply_count
+                          # 使用 topic.posts_count 即可，Discourse 内部会高效处理
+                          # 减 1 是为了排除楼主的帖子
+                          lottery.topic.posts_count - 1 >= lottery.draw_reply_count
+                        else
+                          false
+                        end
           
-          if lottery.draw_type == Lottery::DRAW_TYPES[:by_time]
-            draw_at = lottery.draw_at
-            current_time = Time.zone.now
-            Rails.logger.warn("LOTTERY_DEBUG: -> Type: by_time. Draw at: #{draw_at}, Current time: #{current_time}")
-            if draw_at && current_time >= draw_at
-              should_draw = true
-            end
-          elsif lottery.draw_type == Lottery::DRAW_TYPES[:by_reply]
-            current_replies = topic.posts_count - 1
-            target_replies = lottery.draw_reply_count
-            Rails.logger.warn("LOTTERY_DEBUG: -> Type: by_reply. Target replies: #{target_replies}, Current replies: #{current_replies}")
-            if target_replies && current_replies >= target_replies
-              should_draw = true
-            end
+          # 如果条件满足，则执行开奖
+          if should_draw
+            LotteryManager.new(lottery).perform_draw
           end
 
-          if should_draw
-            Rails.logger.warn("LOTTERY_DEBUG: -> Conditions MET. Performing draw for lottery ##{lottery.id}.")
-            LotteryManager.new(lottery).perform_draw
-          else
-            Rails.logger.warn("LOTTERY_DEBUG: -> Conditions NOT met. Skipping draw for lottery ##{lottery.id}.")
-          end
+        # 捕获并记录在处理单个抽奖时可能发生的任何异常
+        # 这样可以防止一个抽奖的失败影响到其他抽奖的检查
         rescue => e
-          Rails.logger.error("LOTTERY_DRAW_ERROR: Failed to check lottery ##{lottery.id}. Error: #{e.class.name} - #{e.message}\n#{e.backtrace.join("\n")}")
+          Rails.logger.error("LOTTERY_DRAW_ERROR: Failed to process lottery ##{lottery.id} for topic ##{lottery.topic_id}. Error: #{e.class.name}: #{e.message}\n#{e.backtrace.join("\n")}")
         end
       end
-      Rails.logger.warn("LOTTERY_DEBUG: [CheckLotteries Job] Check finished.")
     end
   end
 end
