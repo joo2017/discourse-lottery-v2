@@ -1,6 +1,6 @@
 # name: discourse-lottery-v2
 # about: A modern, automated lottery plugin for Discourse.
-# version: 2.8.0
+# version: 2.8.2
 # authors: Your Name (Revised by AI)
 # url: null
 
@@ -9,8 +9,9 @@ enabled_site_setting :lottery_v2_enabled
 register_asset "stylesheets/common/lottery.scss"
 
 after_initialize do
-  # 【重要】最终修正：在插件初始化时，强制加载所有Discourse核心依赖
-  require_dependency 'topic_changer'
+  # 【重要】最终修正：使用相对于Discourse根目录的路径来加载核心依赖
+  # 这是最稳妥、最不可能出错的方式
+  require_dependency Rails.root.join('lib', 'topic_changer').to_s
   
   require_dependency File.expand_path('../app/models/lottery.rb', __FILE__)
   
