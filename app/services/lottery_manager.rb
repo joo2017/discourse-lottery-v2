@@ -93,7 +93,7 @@ class LotteryManager
   end
 
   def update_lottery(winners)
-    @lottery.update!(status: Lottery::STATUSES[:finished], winner_data: winners)
+    @lottery.update!(status: Lottery::STATUSES[:finished], winner_data: winners.to_json)
   end
   
   def announce_winners(winners)
@@ -121,14 +121,15 @@ class LotteryManager
   end
 
   def update_topic
-    acting_user = Discourse.system_user
-    topic_changer = ::TopicChanger.new(@topic, acting_user)
-    
-    current_tags = @topic.tags.pluck(:name)
-    final_tags = (current_tags - ["抽奖中"]) + ["已开奖"]
-    
-    topic_changer.change_tags(final_tags.uniq)
-    
+    # 使用最原始、最可靠的方式来修改标签
+    tag_to_add = Tag.find_or_create_by!(name: "已开奖")
+    tag_to_remove = Tag.find_by(name: "抽奖中")
+    current_tags = @topic.tags.to_a
+    final_tags = current_tags
+    final_tags.delete(tag_to_remove) if tag_to_remove
+    final_tags << tag_to_add unless final_tags.include?(tag_to_add)
+    @topic.tags = final_tags.uniq
+    @topic.save!
     @topic.update!(closed: true)
   end
 
