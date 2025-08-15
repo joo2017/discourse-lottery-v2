@@ -5,71 +5,93 @@ class LotteryCreator
     @user = topic.user
   end
 
+  # 改进：重构了整个创建流程，增加了详细的验证和日志
   def create_from_template
-    # 幂等性检查，防止因任务重试等原因重复创建
-    return if Lottery.exists?(topic_id: @topic.id)
+    return log_and_return("Lottery already exists", :info) if Lottery.exists?(topic_id: @topic.id)
     
-    raw = @post.raw
-    params = parse_raw(raw)
+    begin
+      raw = @post.raw
+      params = parse_raw(raw)
+      
+      validation_result = validate_params(params, raw)
+      return log_and_return(validation_result[:error], :warn) unless validation_result[:valid]
+
+      lottery = create_lottery_record(params, validation_result[:draw_condition])
+      
+      if lottery&.persisted?
+        add_tag("抽奖中")
+        log_lottery_created(lottery)
+      end
+    rescue => e
+      Rails.logger.error("LOTTERY_CREATE_ERROR: Topic ##{@topic.id} - #{e.class.name}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
+    end
+  end
+
+  private
+
+  def parse_raw(raw)
+    # ... (此方法保持不变)
+  end
+
+  # 改进：增加了详细的参数验证逻辑
+  def validate_params(params, raw)
+    # ... (此处省略，详见下面完整代码)
+  end
+
+  # 改进：健壮的时间和回复数解析
+  def parse_draw_condition(condition_str, draw_type)
+    # ... (此处省略，详见下面完整代码)
+  end
+  
+  # 改进：将记录创建和审计日志封装
+  def create_lottery_record(params, draw_condition)
+    # ... (此处省略，详见下面完整代码)
+  end
+
+  def log_and_return(message, level)
+    Rails.logger.send(level, "LOTTERY_CREATE: Topic ##{@topic.id} - #{message}")
+    nil
+  end
+  
+  def create_audit_log(lottery, action)
+    Rails.logger.info("LOTTERY_AUDIT: lottery_id=#{lottery.id}, action=#{action}, user_id=#{@user.id}, topic_id=#{@topic.id}")
+  end
+
+  # ... (其他辅助方法)
+end
+
+# --- 以下为 LotteryCreator 完整代码 ---
+class LotteryCreator
+  def initialize(topic)
+    @topic = topic
+    @post = topic.first_post
+    @user = topic.user
+  end
+
+  def create_from_template
+    return log_and_return("Lottery already exists", :info) if Lottery.exists?(topic_id: @topic.id)
     
-    # 基础必填项校验
-    required_keys = [:name, :prize, :winner_count, :draw_type]
-    if required_keys.any? { |key| params[key].blank? }
-      Rails.logger.warn("LOTTERY_CREATE_ABORTED: Missing required fields for topic ##{@topic.id}.")
-      return
+    # 验证用户权限
+    allowed_levels = SiteSetting.lottery_v2_allowed_trust_levels.split('|').map(&:to_i)
+    unless allowed_levels.include?(@user.trust_level)
+      return log_and_return("User trust level #{@user.trust_level} not allowed", :warn)
     end
+    
+    begin
+      raw = @post.raw
+      params = parse_raw(raw)
+      
+      validation_result = validate_params(params, raw)
+      return log_and_return(validation_result[:error], :warn) unless validation_result[:valid]
 
-    if params[:winner_count].to_i <= 0
-      Rails.logger.warn("LOTTERY_CREATE_ABORTED: Winner count must be positive for topic ##{@topic.id}.")
-      return
-    end
-
-    draw_condition = raw[/### 开奖条件\n(.*?)(?=\n### |\z)/m, 1]&.strip
-    if draw_condition.blank?
-      Rails.logger.warn("LOTTERY_CREATE_ABORTED: Draw condition is blank for topic ##{@topic.id}.")
-      return
-    end
-
-    lottery_params = {
-      topic_id: @topic.id,
-      post_id: @post.id,
-      created_by_id: @user.id,
-      name: params[:name],
-      prize: params[:prize],
-      winner_count: params[:winner_count],
-      draw_type: params[:draw_type],
-      specific_floors: params[:specific_floors],
-      description: params[:description],
-      extra_info: params[:extra_info],
-      status: :running
-    }
-
-    # 根据开奖类型，进行特定校验
-    if params[:draw_type] == :by_time
-      begin
-        parsed_time = Time.zone.parse(draw_condition)
-        # 校验时间是否有效且在未来
-        if parsed_time.nil? || parsed_time <= Time.zone.now
-          Rails.logger.warn("LOTTERY_CREATE_ABORTED: Invalid or past draw time '#{draw_condition}' for topic ##{@topic.id}.")
-          return
-        end
-        lottery_params[:draw_at] = parsed_time
-      rescue ArgumentError
-        Rails.logger.warn("LOTTERY_CREATE_ABORTED: Could not parse draw time '#{draw_condition}' for topic ##{@topic.id}.")
-        return
+      lottery = create_lottery_record(params, validation_result[:draw_condition])
+      
+      if lottery&.persisted?
+        add_tag("抽奖中")
+        log_lottery_created(lottery)
       end
-    elsif params[:draw_type] == :by_reply
-      draw_reply_count = draw_condition.to_i
-      # 校验回复数是否为正数
-      if draw_reply_count <= 0
-        Rails.logger.warn("LOTTERY_CREATE_ABORTED: Draw reply count must be positive for topic ##{@topic.id}.")
-        return
-      end
-      lottery_params[:draw_reply_count] = draw_reply_count
-    end
-
-    if Lottery.create(lottery_params)
-      add_tag("抽奖中")
+    rescue => e
+      Rails.logger.error("LOTTERY_CREATE_ERROR: Topic ##{@topic.id} - #{e.class.name}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
     end
   end
 
@@ -77,38 +99,103 @@ class LotteryCreator
 
   def parse_raw(raw)
     params = {}
-    # 修正：使用更具弹性的正则表达式，匹配到下一个 '###' 或字符串结尾
-    # 这可以防止因用户在表单中多输入一个换行符而导致的解析失败
     pattern = /### (.+?)\n(.*?)(?=\n### |\z)/m
-
     raw.scan(pattern).each do |match|
       key = match[0].strip
       value = match[1].strip
-      
       case key
-      when "抽奖名称"
-        params[:name] = value
-      when "活动奖品"
-        params[:prize] = value
-      when "获奖人数"
-        params[:winner_count] = value.to_i
-      when "开奖方式"
-        params[:draw_type] = value == "时间开奖" ? :by_time : (value == "回复数开奖" ? :by_reply : nil)
-      when "指定中奖楼层 (可选)"
-        params[:specific_floors] = value
-      when "简单说明 (可选)"
-        params[:description] = value
-      when "其他说明 (可选)"
-        params[:extra_info] = value
+      when "抽奖名称" then params[:name] = value
+      when "活动奖品" then params[:prize] = value
+      when "获奖人数" then params[:winner_count] = value.to_i
+      when "开奖方式" then params[:draw_type] = value == "时间开奖" ? :by_time : (value == "回复数开奖" ? :by_reply : nil)
+      when "指定中奖楼层 (可选)" then params[:specific_floors] = value
+      when "简单说明 (可选)" then params[:description] = value
+      when "其他说明 (可选)" then params[:extra_info] = value
       end
     end
-    
     params
   end
 
+  def validate_params(params, raw)
+    required_keys = [:name, :prize, :winner_count, :draw_type]
+    missing_keys = required_keys.select { |key| params[key].blank? }
+    return { valid: false, error: "Missing required fields: #{missing_keys.join(', ')}" } if missing_keys.any?
+
+    if params[:winner_count] <= 0 || params[:winner_count] > SiteSetting.lottery_v2_max_winners
+      return { valid: false, error: "Invalid winner count: #{params[:winner_count]}" }
+    end
+
+    condition_str = raw[/### 开奖条件\n(.*?)(?=\n### |\z)/m, 1]&.strip
+    parsed_condition = parse_draw_condition(condition_str, params[:draw_type])
+    
+    return { valid: false, error: "Invalid draw condition: #{condition_str}" } if parsed_condition.nil?
+
+    { valid: true, draw_condition: parsed_condition }
+  end
+
+  def parse_draw_condition(condition_str, draw_type)
+    return nil if condition_str.blank?
+    case draw_type
+    when :by_time then parse_time_condition(condition_str)
+    when :by_reply then parse_reply_condition(condition_str)
+    end
+  end
+
+  def parse_time_condition(condition)
+    formats = ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y/%m/%d %H:%M', '%m-%d %H:%M', '%m/%d %H:%M']
+    max_future_date = Time.current.advance(days: SiteSetting.lottery_v2_max_future_days)
+    
+    formats.each do |format|
+      begin
+        parsed_time = DateTime.strptime(condition.strip, format).in_time_zone
+        parsed_time = parsed_time.change(year: Time.current.year) if !format.include?('%Y') && parsed_time < Time.current
+        return parsed_time if parsed_time > Time.current && parsed_time <= max_future_date
+      rescue ArgumentError
+        next
+      end
+    end
+    nil
+  end
+
+  def parse_reply_condition(condition)
+    reply_count = condition.to_i
+    reply_count > 0 ? reply_count : nil
+  end
+
+  def create_lottery_record(params, draw_condition)
+    lottery_params = {
+      topic_id: @topic.id, post_id: @post.id, created_by_id: @user.id,
+      name: params[:name], prize: params[:prize], winner_count: params[:winner_count],
+      draw_type: params[:draw_type], specific_floors: params[:specific_floors],
+      description: params[:description], extra_info: params[:extra_info], status: :running
+    }
+    lottery_params[:draw_at] = draw_condition if params[:draw_type] == :by_time
+    lottery_params[:draw_reply_count] = draw_condition if params[:draw_type] == :by_reply
+    
+    Lottery.transaction do
+      lottery = Lottery.create!(lottery_params)
+      create_audit_log(lottery, 'created')
+      lottery
+    end
+  rescue ActiveRecord::RecordInvalid => e
+    log_and_return("Validation failed: #{e.message}", :error)
+    nil
+  end
+  
   def add_tag(tag_name)
-    # 后台任务中修改主题的最佳实践是使用 system_user 的 Guardian
-    guardian = Guardian.new(Discourse.system_user)
-    DiscourseTagging.tag_topic_by_names(@topic, guardian, [tag_name])
+    DiscourseTagging.tag_topic_by_names(@topic, Guardian.new(Discourse.system_user), [tag_name])
+  end
+
+  def log_lottery_created(lottery)
+    Rails.logger.info("LOTTERY_CREATED: ID=#{lottery.id}, Topic=#{@topic.id}, Type=#{lottery.draw_type}, Condition=#{lottery.draw_at || lottery.draw_reply_count}")
+  end
+  
+  def log_and_return(message, level)
+    Rails.logger.send(level, "LOTTERY_CREATE: Topic ##{@topic.id} - #{message}")
+    nil
+  end
+
+  def create_audit_log(lottery, action)
+    Rails.logger.info("LOTTERY_AUDIT: lottery_id=#{lottery.id}, action=#{action}, user_id=#{@user.id}, topic_id=#{@topic.id}")
   end
 end
