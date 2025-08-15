@@ -9,7 +9,6 @@ zh_CN:
     lottery_v2_auto_close_topic: "抽奖结束后自动锁定主题。"
     lottery_v2_send_notifications: "向中奖用户发送私人消息通知。"
     lottery_v2_cache_duration: "参与人数统计的缓存时间（秒），用于降低数据库负载。"
-    lottery_v2_allowed_trust_levels: "允许发起抽奖的用户信任等级。"
     lottery_v2_max_future_days: "允许设置的未来最远开奖天数（针对时间开奖）。"
   lottery_v2:
     status:
