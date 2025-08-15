@@ -39,7 +39,7 @@ class LotteryCreator
       when "活动奖品" then params[:prize] = value
       when "获奖人数" then params[:winner_count] = value.to_i
       when "开奖方式" then params[:draw_type] = value == "时间开奖" ? :by_time : (value == "回复数开奖" ? :by_reply : nil)
-      when "开奖条件" then params[:draw_condition_str] = value # Store the raw string
+      when "开奖条件" then params[:draw_condition_str] = value
       when "指定中奖楼层 (可选)" then params[:specific_floors] = value
       when "简单说明 (可选)" then params[:description] = value
       when "其他说明 (可选)" then params[:extra_info] = value
