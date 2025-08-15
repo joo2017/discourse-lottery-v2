@@ -118,14 +118,18 @@ class LotteryManager
   end
 
   def update_topic
-    guardian = Guardian.new(Discourse.system_user)
+    # 【重要】最终修正：使用官方推荐的 TopicChanger API
+    acting_user = Discourse.system_user
+    topic_changer = TopicChanger.new(@topic, acting_user)
     
-    # 你的建议是完全正确的，这才是现代、兼容的做法
+    # 计算最终的标签列表
     current_tags = @topic.tags.pluck(:name)
     final_tags = (current_tags - ["抽奖中"]) + ["已开奖"]
-
-    DiscourseTagging.retag_topic_by_names(@topic, guardian, final_tags.uniq)
     
+    # 使用 change_tags 一次性更新所有标签
+    topic_changer.change_tags(final_tags.uniq)
+    
+    # 锁定主题
     @topic.update!(closed: true)
   end
 
