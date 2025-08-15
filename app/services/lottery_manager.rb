@@ -7,8 +7,6 @@ class LotteryManager
   def perform_draw
     return unless @lottery.running?
     
-    # 【重要】最终修正：在开奖前，强制清除并重新计算参与人数
-    # 彻底解决由缓存导致的判断错误
     cache_key = "discourse_lottery_v2:participants:#{@lottery.id}"
     Rails.cache.delete(cache_key)
     participant_count = @lottery.participating_user_count
@@ -141,7 +139,6 @@ class LotteryManager
   end
   
   def announce_cancellation
-    # We check if a cancellation post already exists to avoid double posting.
     last_post = @topic.posts.order(:created_at).last
     return if last_post&.user_id == Discourse.system_user.id && last_post.raw.include?(I18n.t("lottery_v2.draw_result.no_participants"))
 
