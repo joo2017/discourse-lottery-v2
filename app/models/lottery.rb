@@ -1,12 +1,13 @@
-class Lottery < ActiveRecord::Base
+class Lottery < ActiveRecord:Base
   self.table_name = 'lotteries'
 
   belongs_to :topic
   belongs_to :user, foreign_key: :created_by_id
 
-  # 改进：添加了 cancelled 状态
-  enum status: { running: 0, finished: 1, cancelled: 2 }
-  enum draw_type: { by_time: 1, by_reply: 2 }
+  # 修正：将两个 enum 定义合并到一次调用中
+  # 这是为了解决在 Rails 8.0+ 环境下出现的 ArgumentError
+  enum status: { running: 0, finished: 1, cancelled: 2 },
+       draw_type: { by_time: 1, by_reply: 2 }
 
   # 改进：使用缓存优化参与人数统计
   def participating_user_count
