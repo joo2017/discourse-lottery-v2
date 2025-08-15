@@ -30,7 +30,6 @@ export default class LotteryCard extends Component {
   get winnersData() {
     const data = this.lotteryData?.winner_data;
     if (!data) return [];
-    // The data from the serializer should already be JSON, but this adds robustness
     return typeof data === 'string' ? JSON.parse(data) : data;
   }
 
