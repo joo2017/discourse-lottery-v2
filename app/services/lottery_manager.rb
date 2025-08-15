@@ -7,7 +7,12 @@ class LotteryManager
   def perform_draw
     return unless @lottery.running?
     
+    # 【重要】最终修正：在开奖前，强制清除并重新计算参与人数
+    # 彻底解决由缓存导致的判断错误
+    cache_key = "discourse_lottery_v2:participants:#{@lottery.id}"
+    Rails.cache.delete(cache_key)
     participant_count = @lottery.participating_user_count
+
     min_participants = SiteSetting.lottery_v2_min_participants
     
     if participant_count < min_participants
@@ -118,18 +123,14 @@ class LotteryManager
   end
 
   def update_topic
-    # 【重要】最终修正：使用官方推荐的 TopicChanger API
     acting_user = Discourse.system_user
-    topic_changer = TopicChanger.new(@topic, acting_user)
+    topic_changer = ::TopicChanger.new(@topic, acting_user)
     
-    # 计算最终的标签列表
     current_tags = @topic.tags.pluck(:name)
     final_tags = (current_tags - ["抽奖中"]) + ["已开奖"]
     
-    # 使用 change_tags 一次性更新所有标签
     topic_changer.change_tags(final_tags.uniq)
     
-    # 锁定主题
     @topic.update!(closed: true)
   end
 
@@ -140,6 +141,10 @@ class LotteryManager
   end
   
   def announce_cancellation
+    # We check if a cancellation post already exists to avoid double posting.
+    last_post = @topic.posts.order(:created_at).last
+    return if last_post&.user_id == Discourse.system_user.id && last_post.raw.include?(I18n.t("lottery_v2.draw_result.no_participants"))
+
     PostCreator.new(Discourse.system_user, topic_id: @topic.id, raw: I18n.t("lottery_v2.draw_result.no_participants")).create!
   end
 
