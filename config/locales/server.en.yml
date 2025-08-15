@@ -3,7 +3,7 @@ en:
     lottery_v2_enabled: "Enable the new Lottery V2 Plugin."
     lottery_v2_trigger_categories: "Category IDs that trigger a lottery, separated by '|'. Leave empty for all."
     lottery_v2_trigger_tags: "Tag names that trigger a lottery, separated by '|'. Leave empty for all."
-    lottery_v2_floor_fallback: "Action to take if a specified floor is invalid."
+    lottery_v2_floor_fallback: "Action to take if a specified winning floor is invalid (e.g., posted by the topic owner or does not exist)."
   lottery_v2:
     status:
       running: "Lottery in Progress"
@@ -21,4 +21,5 @@ en:
       winners_are: "Congratulations to the following winners:"
     notification:
       won_lottery_title: "You've Won a Lottery!"
-      won_lottery: "Congratulations! You've won the '%{lottery_name}' lottery in the topic: %{topic_title}"
+      # 修正：添加了指向主题的链接
+      won_lottery: "Congratulations! You've won the '%{lottery_name}' lottery in the topic: [%{topic_title}](%{topic_url})"
