@@ -1,6 +1,6 @@
 # name: discourse-lottery-v2
 # about: A modern, automated lottery plugin for Discourse.
-# version: 2.8.2
+# version: 2.9.0
 # authors: Your Name (Revised by AI)
 # url: null
 
@@ -9,9 +9,6 @@ enabled_site_setting :lottery_v2_enabled
 register_asset "stylesheets/common/lottery.scss"
 
 after_initialize do
-  # 修正：直接依赖 'topic_changer'，Rails会自动处理路径
-  require_dependency 'topic_changer'
-  
   require_dependency File.expand_path('../app/models/lottery.rb', __FILE__)
   
   Topic.class_eval do
@@ -68,10 +65,19 @@ after_initialize do
           :id,
           :name, :prize, :winner_count, :draw_at,
           :draw_reply_count, :specific_floors, :description,
-          :extra_info, :winner_data
+          :extra_info
         ],
         methods: [:participating_user_count]
       )
+      
+      # Manually handle winner_data to ensure it's parsed JSON
+      parsed_winner_data = begin
+        JSON.parse(lottery.winner_data) if lottery.winner_data.is_a?(String) && lottery.winner_data.present?
+      rescue JSON::ParserError
+        nil
+      end
+      
+      lottery_json[:winner_data] = parsed_winner_data || lottery.winner_data
 
       lottery_json.merge(
         status: lottery.status_name.to_s,
