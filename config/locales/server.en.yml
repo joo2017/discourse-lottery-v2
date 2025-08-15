@@ -4,10 +4,18 @@ en:
     lottery_v2_trigger_categories: "Category IDs that trigger a lottery, separated by '|'. Leave empty for all."
     lottery_v2_trigger_tags: "Tag names that trigger a lottery, separated by '|'. Leave empty for all."
     lottery_v2_floor_fallback: "Action to take if a specified winning floor is invalid (e.g., posted by the topic owner or does not exist)."
+    lottery_v2_max_winners: "Maximum number of winners allowed for a single lottery."
+    lottery_v2_min_participants: "Minimum number of participants required to perform a draw. If not met, the lottery will be cancelled."
+    lottery_v2_auto_close_topic: "Automatically close the topic after the lottery is drawn."
+    lottery_v2_send_notifications: "Send private messages to winners."
+    lottery_v2_cache_duration: "Duration in seconds for caching the participant count to reduce database load."
+    lottery_v2_allowed_trust_levels: "Trust levels of users who are allowed to create lotteries."
+    lottery_v2_max_future_days: "Maximum number of days in the future a time-based lottery can be set."
   lottery_v2:
     status:
       running: "Lottery in Progress"
       finished: "Lottery Finished"
+      cancelled: "Lottery Cancelled"
     details:
       prize: "Prize"
       winners_count: "Number of Winners"
@@ -16,10 +24,27 @@ en:
     draw_condition:
       by_time: "Draws at: %{time}"
       by_reply: "Draws at %{count} replies"
+      by_reply_with_progress: "Draws at %{target} replies (Current: %{current})"
+    countdown:
+      finished: "Draw time has come"
+      days: "%{days}d %{hours}h"
+      hours: "%{hours}h %{minutes}m"
+      minutes: "%{minutes}m %{seconds}s"
     draw_result:
-      title: "Lottery Results"
+      title: "🎉 Lottery Results"
       winners_are: "Congratulations to the following winners:"
+      no_participants: "Unfortunately, there were not enough participants for this lottery, so it has been cancelled."
+      cancelled: "This lottery has been cancelled."
     notification:
-      won_lottery_title: "You've Won a Lottery!"
-      # 修正：添加了指向主题的链接
-      won_lottery: "Congratulations! You've won the '%{lottery_name}' lottery in the topic: [%{topic_title}](%{topic_url})"
+      won_lottery_title: "🎉 You've Won a Lottery!"
+      won_lottery: |
+        Congratulations! You've won the '%{lottery_name}' lottery in the topic:
+
+        [%{topic_title}](%{topic_url})
+
+        Please contact the organizer for your prize.
+    errors:
+      invalid_date: "Invalid date format for draw time"
+      condition_format_error: "Error displaying draw condition"
+    progress:
+      participation_progress: "Participation Progress"
