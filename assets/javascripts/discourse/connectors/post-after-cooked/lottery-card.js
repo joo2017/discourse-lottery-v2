@@ -26,6 +26,13 @@ export default class LotteryCard extends Component {
   get lotteryData() {
     return this.args.outletArgs.model.topic.lottery_data;
   }
+  
+  get winnersData() {
+    const data = this.lotteryData?.winner_data;
+    if (!data) return [];
+    // The data from the serializer should already be JSON, but this adds robustness
+    return typeof data === 'string' ? JSON.parse(data) : data;
+  }
 
   get isRunning() { return this.lotteryData?.status === "running"; }
   get isFinished() { return this.lotteryData?.status === "finished"; }
@@ -63,7 +70,7 @@ export default class LotteryCard extends Component {
   }
   
   get hasWinners() {
-    return this.isFinished && this.lotteryData.winner_data?.length > 0;
+    return this.isFinished && this.winnersData.length > 0;
   }
 
   startCountdown() {
