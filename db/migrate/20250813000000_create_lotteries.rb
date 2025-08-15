@@ -14,8 +14,8 @@ class CreateLotteries < ActiveRecord::Migration[6.1]
       t.text :description
       t.text :extra_info
       t.integer :status, null: false, default: 0
-      t.jsonb :winner_data
-      t.timestamps
+      t.text :winner_data # 改为 text 以确保最大兼容性
+      t.timestamps null: false
     end
 
     add_index :lotteries, :topic_id, unique: true
