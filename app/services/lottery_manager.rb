@@ -87,7 +87,7 @@ class LotteryManager
   end
 
   def update_lottery(winners)
-    @lottery.update!(status: :finished, winner_data: winners.to_json)
+    @lottery.update!(status: Lottery::STATUSES[:finished], winner_data: winners)
   end
   
   def announce_winners(winners)
@@ -104,7 +104,10 @@ class LotteryManager
       next unless user
       PostCreator.new(Discourse.system_user,
         title: I18n.t("lottery_v2.notification.won_lottery_title"),
-        raw: I18n.t("lottery_v2.notification.won_lottery", lottery_name: @lottery.name, topic_title: @topic.title, topic_url: @topic.url),
+        raw: I18n.t("lottery_v2.notification.won_lottery", 
+                    lottery_name: @lottery.name, 
+                    topic_title: @topic.title, 
+                    topic_url: @topic.url),
         archetype: Archetype.private_message,
         target_usernames: [user.username]
       ).create!
@@ -119,7 +122,7 @@ class LotteryManager
   end
 
   def handle_no_winners(reason)
-    @lottery.update!(status: :cancelled)
+    @lottery.update!(status: Lottery::STATUSES[:cancelled])
     announce_cancellation
     create_audit_log('draw_cancelled', { reason: reason })
   end
