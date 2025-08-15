@@ -120,11 +120,10 @@ class LotteryManager
   def update_topic
     guardian = Guardian.new(Discourse.system_user)
     
-    # 获取当前标签，并计算出最终应该保留的标签列表
+    # 你的建议是完全正确的，这才是现代、兼容的做法
     current_tags = @topic.tags.pluck(:name)
     final_tags = (current_tags - ["抽奖中"]) + ["已开奖"]
-    
-    # 修正：使用 retag_topic_by_names 来替换所有标签，这是最稳妥的现代API
+
     DiscourseTagging.retag_topic_by_names(@topic, guardian, final_tags.uniq)
     
     @topic.update!(closed: true)
@@ -137,15 +136,4 @@ class LotteryManager
   end
   
   def announce_cancellation
-    PostCreator.new(Discourse.system_user, topic_id: @topic.id, raw: I18n.t("lottery_v2.draw_result.no_participants")).create!
-  end
-
-  def handle_draw_error(error)
-    Rails.logger.error("LOTTERY_DRAW_ERROR: Lottery #{@lottery.id} - #{error.class.name}: #{error.message}\n#{error.backtrace.first(10).join("\n")}")
-    create_audit_log('draw_failed', { error: error.message })
-  end
-
-  def create_audit_log(action, data = {})
-    Rails.logger.info("LOTTERY_AUDIT: lottery_id=#{@lottery.id}, action=#{action}, data=#{data.to_json}")
-  end
-end
+    PostCreator.new(Discourse.system_user, topic_id: @topic.id, raw: I18n.t("lottery_v2.draw_result.no_particip
