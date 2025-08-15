@@ -7,122 +7,103 @@ class LotteryManager
   def perform_draw
     return unless @lottery.running?
     
-    winners = find_winners
-    
-    # 如果没有找到任何有效的中奖者，则中止抽奖，避免后续操作出错
-    if winners.blank?
-      Rails.logger.warn("LOTTERY_DRAW_ABORTED: No valid winners found for lottery ##{@lottery.id}.")
-      return
+    if @lottery.participating_user_count < SiteSetting.lottery_v2_min_participants
+      return handle_no_winners("Not enough participants. Required: #{SiteSetting.lottery_v2_min_participants}, Actual: #{@lottery.participating_user_count}")
     end
 
-    # 修正：使用数据库事务来确保开奖流程的原子性
-    # 如果其中任何一步失败（例如发帖API变更），所有数据库操作都会回滚
-    ActiveRecord::Base.transaction do
-      update_lottery(winners)
-      announce_winners(winners)
-      send_notifications(winners)
-      update_topic
+    begin
+      Lottery.transaction do
+        winners = find_winners
+        return handle_no_winners("No valid participants found after filtering") if winners.blank?
+        
+        validated_winners = validate_winners(winners)
+        return handle_no_winners("No valid winners after validation (e.g., suspended users)") if validated_winners.blank?
+
+        update_lottery(validated_winners)
+        announce_winners(validated_winners)
+        send_notifications(validated_winners) if SiteSetting.lottery_v2_send_notifications
+        update_topic if SiteSetting.lottery_v2_auto_close_topic
+        
+        create_audit_log('draw_completed', { winners_count: validated_winners.size })
+      end
+    rescue => e
+      handle_draw_error(e)
     end
   end
 
   private
-
+  
   def find_winners
-    if @lottery.specific_floors.present?
-      find_winners_by_floor
-    else
-      find_winners_by_random
-    end
-  end
-
-  def find_winners_by_floor
-    target_floors = @lottery.specific_floors.split(',').map(&:to_i).uniq.sort
-    
-    # 查找所有目标楼层的有效帖子（非楼主发布）
-    valid_posts_map = Post.where(topic_id: @topic.id, post_number: target_floors)
-                          .where.not(user_id: @lottery.created_by_id)
-                          .index_by(&:post_number)
-
-    winners = []
-    
-    target_floors.each do |floor|
-      post = valid_posts_map[floor]
-      if post.present?
-        winners << { user_id: post.user_id, username: post.user.username, post_number: post.post_number }
-      else
-        # 修正：实现指定楼层无效时的回退策略
-        fallback_action = SiteSetting.lottery_v2_floor_fallback
-        if fallback_action == 'next'
-          # 寻找下一个有效的楼层作为替补（不能是已中奖的用户或已检查过的楼层）
-          existing_winner_ids = winners.map { |w| w[:user_id] }
-          existing_post_numbers = winners.map { |w| w[:post_number] }
-
-          next_valid_post = Post.where(topic_id: @topic.id)
-                                .where("post_number > ?", floor)
-                                .where.not(user_id: @lottery.created_by_id)
-                                .where.not(user_id: existing_winner_ids)
-                                .where.not(post_number: existing_post_numbers)
-                                .order(:post_number)
-                                .first
-          if next_valid_post
-            winners << { user_id: next_valid_post.user_id, username: next_valid_post.user.username, post_number: next_valid_post.post_number }
-          end
-        end
-        # 如果 fallback_action 是 'void' (默认)，则什么都不做，该中奖名额作废
-      end
-    end
-    
-    # 再次去重，以防 'next' 策略找到重复的用户
-    winners.uniq! { |w| w[:user_id] }
-    # 确保最终获奖人数不超过设定的总数
-    winners.take(@lottery.winner_count)
+    @lottery.specific_floors.present? ? find_winners_by_floor : find_winners_by_random
   end
 
   def find_winners_by_random
-    # 筛选出所有有效参与者（排除楼主，每人只计最早的回复）
-    participant_posts = Post.where(topic_id: @topic.id)
-                            .where("post_number > 1")
-                            .where.not(user_id: @lottery.created_by_id)
-                            .order(:created_at)
-                            .uniq(&:user_id)
+    participants = @lottery.valid_participants_with_user
+    return [] if participants.empty?
+    participants.sample(@lottery.winner_count).map { |post| format_winner_data(post) }
+  end
 
-    return [] if participant_posts.empty?
+  def find_winners_by_floor
+    floors = @lottery.specific_floors.split(/[,，\s]+/).map(&:to_i).select { |n| n > 1 }.uniq.sort
+    return [] if floors.empty?
+    
+    posts_map = Post.includes(:user).where(topic_id: @topic.id, post_number: floors)
+                    .where.not(user_id: @lottery.created_by_id)
+                    .index_by(&:post_number)
+    
+    winners = []
+    
+    floors.each do |floor|
+      post = posts_map[floor]
+      if post
+        winners << post
+      elsif SiteSetting.lottery_v2_floor_fallback == 'next'
+        existing_winner_ids = winners.map(&:user_id)
+        next_post = Post.includes(:user)
+                        .where(topic_id: @topic.id)
+                        .where("post_number > ?", floor)
+                        .where.not(user_id: @lottery.created_by_id)
+                        .where.not(user_id: existing_winner_ids)
+                        .order(:post_number)
+                        .first
+        winners << next_post if next_post
+      end
+    end
+    
+    winners.uniq(&:user_id).take(@lottery.winner_count).map { |p| format_winner_data(p) }
+  end
 
-    # 修正：抽奖人数取 设定获奖人数 和 有效参与人数 中的较小值
-    draw_count = [@lottery.winner_count, participant_posts.size].min
-    
-    winners_posts = participant_posts.sample(draw_count)
-    
-    winners_posts.map do |post|
-      { user_id: post.user_id, username: post.user.username, post_number: post.post_number }
+  def validate_winners(winners)
+    winners.select do |winner|
+      user = User.find_by(id: winner[:user_id])
+      is_valid = user && !user.suspended? && !user.staged?
+      Rails.logger.warn("LOTTERY_INVALID_WINNER: User #{winner[:user_id]} is invalid") unless is_valid
+      is_valid
     end
   end
 
-  def update_lottery(winners)
-    # 使用 `update!` 在失败时抛出异常以触发事务回滚
-    @lottery.update!(status: :finished, winner_data: winners.to_json)
+  def format_winner_data(post)
+    { user_id: post.user_id, username: post.user.username, post_number: post.post_number, user_title: post.user&.title }
   end
 
+  def update_lottery(winners)
+    @lottery.update!(status: :finished, winner_data: winners.to_json)
+  end
+  
   def announce_winners(winners)
     winner_list = winners.map do |winner|
       "- @#{winner[:username]} (##{winner[:post_number]})"
     end.join("\n")
-
     raw_content = "#{I18n.t("lottery_v2.draw_result.title")}\n\n#{I18n.t("lottery_v2.draw_result.winners_are")}\n#{winner_list}"
-    
-    # 使用 `create!`
     PostCreator.new(Discourse.system_user, topic_id: @topic.id, raw: raw_content).create!
   end
-
+  
   def send_notifications(winners)
     winners.each do |winner|
       user = User.find_by(id: winner[:user_id])
       next unless user
-
-      # 使用 `create!`
       PostCreator.new(Discourse.system_user,
         title: I18n.t("lottery_v2.notification.won_lottery_title"),
-        # 修正：传入 topic_url
         raw: I18n.t("lottery_v2.notification.won_lottery", lottery_name: @lottery.name, topic_title: @topic.title, topic_url: @topic.url),
         archetype: Archetype.private_message,
         target_usernames: [user.username]
@@ -131,13 +112,28 @@ class LotteryManager
   end
 
   def update_topic
-    # 修正：使用更可靠的 DiscourseTagging.synchronize_tags 方法
     current_tags = @topic.tags.pluck(:name)
     new_tags = (current_tags - ["抽奖中"]) + ["已开奖"]
-    
     DiscourseTagging.synchronize_tags(@topic, Tag.where(name: new_tags), Guardian.new(Discourse.system_user))
-    
-    # 使用 `update!`
     @topic.update!(closed: true)
+  end
+
+  def handle_no_winners(reason)
+    @lottery.update!(status: :cancelled)
+    announce_cancellation
+    create_audit_log('draw_cancelled', { reason: reason })
+  end
+  
+  def announce_cancellation
+    PostCreator.new(Discourse.system_user, topic_id: @topic.id, raw: I18n.t("lottery_v2.draw_result.no_participants")).create!
+  end
+
+  def handle_draw_error(error)
+    Rails.logger.error("LOTTERY_DRAW_ERROR: Lottery #{@lottery.id} - #{error.class.name}: #{error.message}\n#{error.backtrace.first(10).join("\n")}")
+    create_audit_log('draw_failed', { error: error.message })
+  end
+
+  def create_audit_log(action, data = {})
+    Rails.logger.info("LOTTERY_AUDIT: lottery_id=#{@lottery.id}, action=#{action}, data=#{data.to_json}")
   end
 end
