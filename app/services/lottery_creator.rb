@@ -8,17 +8,11 @@ class LotteryCreator
   def create_from_template
     return log_and_return("Lottery already exists", :info) if Lottery.exists?(topic_id: @topic.id)
     
-    allowed_levels_setting = SiteSetting.lottery_v2_allowed_trust_levels
-    allowed_levels = allowed_levels_setting.is_a?(String) ? allowed_levels_setting.split('|').map(&:to_i) : []
-    unless allowed_levels.include?(@user.trust_level)
-      return log_and_return("User trust level #{@user.trust_level} not allowed", :warn)
-    end
-    
     begin
       raw = @post.raw
       params = parse_raw(raw)
       
-      validation_result = validate_params(params, raw)
+      validation_result = validate_params(params)
       return log_and_return(validation_result[:error], :warn) unless validation_result[:valid]
 
       lottery = create_lottery_record(params, validation_result[:draw_condition])
@@ -45,6 +39,7 @@ class LotteryCreator
       when "活动奖品" then params[:prize] = value
       when "获奖人数" then params[:winner_count] = value.to_i
       when "开奖方式" then params[:draw_type] = value == "时间开奖" ? :by_time : (value == "回复数开奖" ? :by_reply : nil)
+      when "开奖条件" then params[:draw_condition_str] = value # Store the raw string
       when "指定中奖楼层 (可选)" then params[:specific_floors] = value
       when "简单说明 (可选)" then params[:description] = value
       when "其他说明 (可选)" then params[:extra_info] = value
@@ -53,8 +48,8 @@ class LotteryCreator
     params
   end
 
-  def validate_params(params, raw)
-    required_keys = [:name, :prize, :winner_count, :draw_type]
+  def validate_params(params)
+    required_keys = [:name, :prize, :winner_count, :draw_type, :draw_condition_str]
     missing_keys = required_keys.select { |key| params[key].blank? }
     return { valid: false, error: "Missing required fields: #{missing_keys.join(', ')}" } if missing_keys.any?
 
@@ -62,10 +57,9 @@ class LotteryCreator
       return { valid: false, error: "Invalid winner count: #{params[:winner_count]}. Must be between 1 and #{SiteSetting.lottery_v2_max_winners}." }
     end
 
-    condition_str = raw[/### 开奖条件\n(.*?)(?=\n### |\z)/m, 1]&.strip
-    parsed_condition = parse_draw_condition(condition_str, params[:draw_type])
+    parsed_condition = parse_draw_condition(params[:draw_condition_str], params[:draw_type])
     
-    return { valid: false, error: "Invalid draw condition: #{condition_str}" } if parsed_condition.nil?
+    return { valid: false, error: "Invalid draw condition: #{params[:draw_condition_str]}" } if parsed_condition.nil?
 
     { valid: true, draw_condition: parsed_condition }
   end
@@ -105,8 +99,10 @@ class LotteryCreator
     lottery_params = {
       topic_id: @topic.id, post_id: @post.id, created_by_id: @user.id,
       name: params[:name], prize: params[:prize], winner_count: params[:winner_count],
-      draw_type: params[:draw_type], specific_floors: params[:specific_floors],
-      description: params[:description], extra_info: params[:extra_info], status: :running
+      draw_type: Lottery::DRAW_TYPES[params[:draw_type]], 
+      specific_floors: params[:specific_floors],
+      description: params[:description], extra_info: params[:extra_info], 
+      status: Lottery::STATUSES[:running]
     }
     lottery_params[:draw_at] = draw_condition if params[:draw_type] == :by_time
     lottery_params[:draw_reply_count] = draw_condition if params[:draw_type] == :by_reply
@@ -127,7 +123,7 @@ class LotteryCreator
 
   def log_lottery_created(lottery)
     condition = lottery.draw_at || lottery.draw_reply_count
-    Rails.logger.info("LOTTERY_CREATED: ID=#{lottery.id}, Topic=#{@topic.id}, Type=#{lottery.draw_type}, Condition=#{condition}")
+    Rails.logger.info("LOTTERY_CREATED: ID=#{lottery.id}, Topic=#{@topic.id}, Type=#{lottery.draw_type_name}, Condition=#{condition}")
   end
   
   def log_and_return(message, level)
