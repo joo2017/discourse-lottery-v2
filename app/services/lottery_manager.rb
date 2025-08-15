@@ -136,4 +136,15 @@ class LotteryManager
   end
   
   def announce_cancellation
-    PostCreator.new(Discourse.system_user, topic_id: @topic.id, raw: I18n.t("lottery_v2.draw_result.no_particip
+    PostCreator.new(Discourse.system_user, topic_id: @topic.id, raw: I18n.t("lottery_v2.draw_result.no_participants")).create!
+  end
+
+  def handle_draw_error(error)
+    Rails.logger.error("LOTTERY_DRAW_ERROR: Lottery #{@lottery.id} - #{error.class.name}: #{error.message}\n#{error.backtrace.first(10).join("\n")}")
+    create_audit_log('draw_failed', { error: error.message })
+  end
+
+  def create_audit_log(action, data = {})
+    Rails.logger.info("LOTTERY_AUDIT: lottery_id=#{@lottery.id}, action=#{action}, data=#{data.to_json}")
+  end
+end
