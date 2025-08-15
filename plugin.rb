@@ -24,11 +24,16 @@ after_initialize do
   
   on(:topic_created) do |topic, opts, user|
     if SiteSetting.lottery_v2_enabled
-      trigger_categories = SiteSetting.lottery_v2_trigger_categories.split('|').map(&:to_i).compact
+      # 修正：使用 reject(&:zero?) 过滤掉因 'abc'.to_i 产生的无效分类ID 0
+      trigger_categories = SiteSetting.lottery_v2_trigger_categories.split('|').map(&:to_i).reject(&:zero?)
       trigger_tags = SiteSetting.lottery_v2_trigger_tags.split('|').map(&:downcase).compact_blank
 
       category_match = trigger_categories.empty? || trigger_categories.include?(topic.category_id)
-      tags_match = trigger_tags.empty? || !((topic.tags.map(&:name).map(&:downcase) & trigger_tags).empty?)
+      
+      topic_tags = topic.tags.map(&:name).map(&:downcase)
+      # 修正：如果标签设置不为空，则必须至少有一个标签匹配
+      # 使用 `intersect?` (Ruby 2.6+) 更具可读性，功能等同于 !((a & b).empty?)
+      tags_match = trigger_tags.empty? || trigger_tags.intersect?(topic_tags)
 
       if category_match && tags_match
         Jobs.enqueue(:create_lottery_from_topic, topic_id: topic.id)
@@ -41,24 +46,30 @@ after_initialize do
     attributes :lottery_data
 
     def lottery_data
+      # 使用 object.topic.lottery 而不是查询，这样可以利用预加载
       lottery = object.topic.lottery
       return nil unless lottery
 
-      lottery.as_json(
+      # 使用 to_h.slice 将模型转换为哈希，然后选择需要的键，更安全
+      lottery_json = lottery.as_json(
         only: [
-          :name, :prize, :winner_count, :draw_type, :draw_at,
+          :name, :prize, :winner_count, :draw_at,
           :draw_reply_count, :specific_floors, :description,
-          :extra_info, :status, :winner_data
+          :extra_info, :winner_data
         ],
         methods: [:participating_user_count]
-      ).merge(
-        status: lottery.status_name.to_s,
-        draw_type: lottery.draw_type_name.to_s
+      )
+
+      # 合并手动处理的字段，确保 enum 值是字符串
+      lottery_json.merge(
+        status: lottery.status.to_s,
+        draw_type: lottery.draw_type.to_s
       )
     end
     
     def include_lottery_data?
-      object.topic.lottery.present?
+      # 确保关联关系存在且已加载
+      object.topic.association(:lottery).loaded? ? object.topic.lottery.present? : Lottery.exists?(topic_id: object.topic.id)
     end
   end
 end
