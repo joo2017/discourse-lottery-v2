@@ -9,9 +9,8 @@ enabled_site_setting :lottery_v2_enabled
 register_asset "stylesheets/common/lottery.scss"
 
 after_initialize do
-  # 【重要】最终修正：使用相对于Discourse根目录的路径来加载核心依赖
-  # 这是最稳妥、最不可能出错的方式
-  require_dependency Rails.root.join('lib', 'topic_changer').to_s
+  # 修正：直接依赖 'topic_changer'，Rails会自动处理路径
+  require_dependency 'topic_changer'
   
   require_dependency File.expand_path('../app/models/lottery.rb', __FILE__)
   
