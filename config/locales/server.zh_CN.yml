@@ -3,7 +3,7 @@ zh_CN:
     lottery_v2_enabled: "启用新版抽奖插件 (V2)。"
     lottery_v2_trigger_categories: "触发抽奖的分类ID，使用'|'分隔。留空则适用于所有分类。"
     lottery_v2_trigger_tags: "触发抽奖的标签名，使用'|'分隔。留空则适用于所有标签。"
-    lottery_v2_floor_fallback: "当指定中奖楼层无效时的处理方式。"
+    lottery_v2_floor_fallback: "当指定的中奖楼层无效时（例如楼层由楼主发布或不存在）的处理方式。"
   lottery_v2:
     status:
       running: "抽奖进行中"
@@ -21,4 +21,5 @@ zh_CN:
       winners_are: "恭喜以下用户中奖："
     notification:
       won_lottery_title: "您中奖啦！"
-      won_lottery: "恭喜您！您在主题 “%{topic_title}” 中赢得了 “%{lottery_name}” 抽奖活动！"
+      # 修正：添加了指向主题的链接
+      won_lottery: "恭喜您！您在主题 “[%{topic_title}](%{topic_url})” 中赢得了 “%{lottery_name}” 抽奖活动！"
