@@ -3,37 +3,134 @@ module Jobs
     every 1.minute
 
     def execute(args)
-      # 查询所有状态为 'running' 的抽奖
       running_lotteries = Lottery.running
-
-      # 只有在确实有正在进行的抽奖时，才进行下一步的迭代处理
-      # 这样可以避免在没有抽奖时进行不必要的数据库查询
       return if running_lotteries.empty?
 
       running_lotteries.find_each do |lottery|
         begin
-          # 检查抽奖条件是否满足
           should_draw = if lottery.by_time? && lottery.draw_at
                           Time.zone.now >= lottery.draw_at
                         elsif lottery.by_reply? && lottery.draw_reply_count
-                          # 使用 topic.posts_count 即可，Discourse 内部会高效处理
-                          # 减 1 是为了排除楼主的帖子
                           lottery.topic.posts_count - 1 >= lottery.draw_reply_count
                         else
                           false
                         end
           
-          # 如果条件满足，则执行开奖
           if should_draw
             LotteryManager.new(lottery).perform_draw
           end
-
-        # 捕获并记录在处理单个抽奖时可能发生的任何异常
-        # 这样可以防止一个抽奖的失败影响到其他抽奖的检查
         rescue => e
           Rails.logger.error("LOTTERY_DRAW_ERROR: Failed to process lottery ##{lottery.id} for topic ##{lottery.topic_id}. Error: #{e.class.name}: #{e.message}\n#{e.backtrace.join("\n")}")
         end
       end
     end
   end
-end
+end```
+
+---
+#### **`/var/discourse/plugins/discourse-lottery-v2/assets/javascripts/discourse/connectors/post-after-cooked/lottery-card.js` (完整版)**
+```javascript
+import Component from "@glimmer/component";
+import { inject as service } from "@ember/service";
+import { tracked } from "@glimmer/tracking";
+import I18n from "I18n";
+
+export default class LotteryCard extends Component {
+  @service site;
+  @tracked timeRemaining = null;
+  timer = null;
+
+  constructor() {
+    super(...arguments);
+    if (this.isRunning && this.lotteryData?.draw_type === "by_time") {
+      this.startCountdown();
+    }
+  }
+
+  willDestroy() {
+    super.willDestroy(...arguments);
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+  }
+
+  get lotteryData() {
+    return this.args.outletArgs.model.topic.lottery_data;
+  }
+  
+  get winnersData() {
+    const data = this.lotteryData?.winner_data;
+    if (!data) return [];
+    return typeof data === 'string' ? JSON.parse(data) : data;
+  }
+
+  get isRunning() { return this.lotteryData?.status === "running"; }
+  get isFinished() { return this.lotteryData?.status === "finished"; }
+  get isCancelled() { return this.lotteryData?.status === "cancelled"; }
+
+  get drawConditionText() {
+    try {
+      if (!this.lotteryData) return "";
+      
+      if (this.lotteryData.draw_type === "by_time" && this.lotteryData.draw_at) {
+        const date = new Date(this.lotteryData.draw_at);
+        if (isNaN(date.getTime())) return I18n.t("lottery_v2.errors.invalid_date");
+        const baseText = I18n.t("lottery_v2.draw_condition.by_time", { time: date.toLocaleString() });
+        return this.timeRemaining && this.isRunning ? `${baseText} (${this.timeRemaining})` : baseText;
+
+      } else if (this.lotteryData.draw_type === "by_reply") {
+        const current = this.lotteryData.participating_user_count || 0;
+        const target = this.lotteryData.draw_reply_count;
+        return I18n.t("lottery_v2.draw_condition.by_reply_with_progress", { current, target });
+      }
+    } catch (e) {
+      console.error("Error formatting draw condition:", e);
+      return I18n.t("lottery_v2.errors.condition_format_error");
+    }
+    return "";
+  }
+
+  get progressPercentage() {
+    if (this.lotteryData?.draw_type === "by_reply" && this.lotteryData.draw_reply_count > 0) {
+      const current = this.lotteryData.participating_user_count || 0;
+      const target = this.lotteryData.draw_reply_count;
+      return Math.min((current / target) * 100, 100);
+    }
+    return 0;
+  }
+  
+  get hasWinners() {
+    return this.isFinished && this.winnersData.length > 0;
+  }
+
+  startCountdown() {
+    if (!this.lotteryData?.draw_at) return;
+    const targetTime = new Date(this.lotteryData.draw_at).getTime();
+
+    const update = () => {
+      const diff = targetTime - new Date().getTime();
+      if (diff <= 0) {
+        this.timeRemaining = I18n.t("lottery_v2.countdown.finished");
+        clearInterval(this.timer);
+        this.timer = null;
+        return;
+      }
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      if (days > 0) {
+        this.timeRemaining = I18n.t("lottery_v2.countdown.days", { days, hours });
+      } else if (hours > 0) {
+        this.timeRemaining = I18n.t("lottery_v2.countdown.hours", { hours, minutes });
+      } else {
+        this.timeRemaining = I18n.t("lottery_v2.countdown.minutes", { minutes, seconds });
+      }
+    };
+
+    update();
+    this.timer = setInterval(update, 1000);
+  }
+}
