@@ -9,7 +9,6 @@ en:
     lottery_v2_auto_close_topic: "Automatically close the topic after the lottery is drawn."
     lottery_v2_send_notifications: "Send private messages to winners."
     lottery_v2_cache_duration: "Duration in seconds for caching the participant count to reduce database load."
-    lottery_v2_allowed_trust_levels: "Trust levels of users who are allowed to create lotteries."
     lottery_v2_max_future_days: "Maximum number of days in the future a time-based lottery can be set."
   lottery_v2:
     status:
