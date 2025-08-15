@@ -1,4 +1,4 @@
-class Lottery < ActiveRecord:Base
+class Lottery < ActiveRecord::Base
   self.table_name = 'lotteries'
 
   belongs_to :topic
