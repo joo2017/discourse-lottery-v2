@@ -50,12 +50,6 @@ plugins:
     min: 30
     max: 3600
     description: "Duration in seconds for caching the participant count to reduce database load."
-  lottery_v2_allowed_trust_levels:
-    default: "1|2|3|4"
-    client: false
-    type: "list"
-    list_type: "integer"
-    description: "Trust levels of users who are allowed to create lotteries."
   lottery_v2_max_future_days:
     default: 365
     client: false
