@@ -117,15 +117,15 @@ class LotteryManager
     end
   end
 
-  # 【重要】修正：使用新的 DiscourseTagging API
   def update_topic
     guardian = Guardian.new(Discourse.system_user)
-    tag_names_to_add = ["已开奖"]
-    tag_names_to_remove = ["抽奖中"]
-
-    # 使用新的、更可靠的 API
-    DiscourseTagging.add_tags(tag_names_to_add, @topic, guardian)
-    DiscourseTagging.remove_tags(tag_names_to_remove, @topic, guardian)
+    
+    # 获取当前标签，并计算出最终应该保留的标签列表
+    current_tags = @topic.tags.pluck(:name)
+    final_tags = (current_tags - ["抽奖中"]) + ["已开奖"]
+    
+    # 修正：使用 retag_topic_by_names 来替换所有标签，这是最稳妥的现代API
+    DiscourseTagging.retag_topic_by_names(@topic, guardian, final_tags.uniq)
     
     @topic.update!(closed: true)
   end
