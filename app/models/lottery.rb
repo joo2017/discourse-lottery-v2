@@ -4,17 +4,14 @@ class Lottery < ActiveRecord::Base
   belongs_to :topic
   belongs_to :user, foreign_key: :created_by_id
 
-  # --- 手动实现 Enum 功能以绕过构建错误 ---
-  
+  # --- 手动实现 Enum 功能以确保兼容性 ---
   STATUSES = { running: 0, finished: 1, cancelled: 2 }.with_indifferent_access.freeze
   DRAW_TYPES = { by_time: 1, by_reply: 2 }.with_indifferent_access.freeze
 
-  # 定义 scopes (例如 Lottery.running)
   STATUSES.each_key do |status_name|
     scope status_name, -> { where(status: STATUSES[status_name]) }
   end
 
-  # 定义状态查询方法 (例如 lottery.running?)
   def status_name
     STATUSES.key(self.status)
   end
@@ -25,7 +22,6 @@ class Lottery < ActiveRecord::Base
     end
   end
 
-  # 定义开奖类型查询方法 (例如 lottery.by_time?)
   def draw_type_name
     DRAW_TYPES.key(self.draw_type)
   end
@@ -37,11 +33,11 @@ class Lottery < ActiveRecord::Base
   end
   # --- Enum 手动实现结束 ---
 
-
-  # 改进：使用缓存优化参与人数统计
   def participating_user_count
     cache_duration = SiteSetting.lottery_v2_cache_duration.seconds
-    Rails.cache.fetch("lottery_#{id}_participants", expires_in: cache_duration) do
+    cache_key = "discourse_lottery_v2:participants:#{id}"
+    
+    Rails.cache.fetch(cache_key, expires_in: cache_duration) do
       Post.where(topic_id: self.topic_id)
           .where("post_number > 1")
           .where.not(user_id: self.created_by_id)
@@ -50,39 +46,6 @@ class Lottery < ActiveRecord::Base
     end
   end
 
-  # 改进：添加方法获取有效参与者（带用户信息），用于解决 N+1 问题
-  def valid_participants_with_user
-    Post.includes(:user)
-        .where(topic_id: self.topic_id)
-        .where("post_number > 1")
-        .where.not(user_id: self.created_by_id)
-        .order(:created_at)
-        .then { |posts| posts.uniq(&:user_id) }
-  end
-endclass Lottery < ActiveRecord::Base
-  self.table_name = 'lotteries'
-
-  belongs_to :topic
-  belongs_to :user, foreign_key: :created_by_id
-
-  # 修正：将两个 enum 定义合并到一次调用中
-  # 这是为了解决在 Rails 8.0+ 环境下出现的 ArgumentError
-  enum status: { running: 0, finished: 1, cancelled: 2 },
-       draw_type: { by_time: 1, by_reply: 2 }
-
-  # 改进：使用缓存优化参与人数统计
-  def participating_user_count
-    cache_duration = SiteSetting.lottery_v2_cache_duration.seconds
-    Rails.cache.fetch("lottery_#{id}_participants", expires_in: cache_duration) do
-      Post.where(topic_id: self.topic_id)
-          .where("post_number > 1")
-          .where.not(user_id: self.created_by_id)
-          .distinct
-          .count(:user_id)
-    end
-  end
-
-  # 改进：添加方法获取有效参与者（带用户信息），用于解决 N+1 问题
   def valid_participants_with_user
     Post.includes(:user)
         .where(topic_id: self.topic_id)
