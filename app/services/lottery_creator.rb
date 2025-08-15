@@ -5,74 +5,11 @@ class LotteryCreator
     @user = topic.user
   end
 
-  # 改进：重构了整个创建流程，增加了详细的验证和日志
   def create_from_template
     return log_and_return("Lottery already exists", :info) if Lottery.exists?(topic_id: @topic.id)
     
-    begin
-      raw = @post.raw
-      params = parse_raw(raw)
-      
-      validation_result = validate_params(params, raw)
-      return log_and_return(validation_result[:error], :warn) unless validation_result[:valid]
-
-      lottery = create_lottery_record(params, validation_result[:draw_condition])
-      
-      if lottery&.persisted?
-        add_tag("抽奖中")
-        log_lottery_created(lottery)
-      end
-    rescue => e
-      Rails.logger.error("LOTTERY_CREATE_ERROR: Topic ##{@topic.id} - #{e.class.name}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
-    end
-  end
-
-  private
-
-  def parse_raw(raw)
-    # ... (此方法保持不变)
-  end
-
-  # 改进：增加了详细的参数验证逻辑
-  def validate_params(params, raw)
-    # ... (此处省略，详见下面完整代码)
-  end
-
-  # 改进：健壮的时间和回复数解析
-  def parse_draw_condition(condition_str, draw_type)
-    # ... (此处省略，详见下面完整代码)
-  end
-  
-  # 改进：将记录创建和审计日志封装
-  def create_lottery_record(params, draw_condition)
-    # ... (此处省略，详见下面完整代码)
-  end
-
-  def log_and_return(message, level)
-    Rails.logger.send(level, "LOTTERY_CREATE: Topic ##{@topic.id} - #{message}")
-    nil
-  end
-  
-  def create_audit_log(lottery, action)
-    Rails.logger.info("LOTTERY_AUDIT: lottery_id=#{lottery.id}, action=#{action}, user_id=#{@user.id}, topic_id=#{@topic.id}")
-  end
-
-  # ... (其他辅助方法)
-end
-
-# --- 以下为 LotteryCreator 完整代码 ---
-class LotteryCreator
-  def initialize(topic)
-    @topic = topic
-    @post = topic.first_post
-    @user = topic.user
-  end
-
-  def create_from_template
-    return log_and_return("Lottery already exists", :info) if Lottery.exists?(topic_id: @topic.id)
-    
-    # 验证用户权限
-    allowed_levels = SiteSetting.lottery_v2_allowed_trust_levels.split('|').map(&:to_i)
+    allowed_levels_setting = SiteSetting.lottery_v2_allowed_trust_levels
+    allowed_levels = allowed_levels_setting.is_a?(String) ? allowed_levels_setting.split('|').map(&:to_i) : []
     unless allowed_levels.include?(@user.trust_level)
       return log_and_return("User trust level #{@user.trust_level} not allowed", :warn)
     end
@@ -122,7 +59,7 @@ class LotteryCreator
     return { valid: false, error: "Missing required fields: #{missing_keys.join(', ')}" } if missing_keys.any?
 
     if params[:winner_count] <= 0 || params[:winner_count] > SiteSetting.lottery_v2_max_winners
-      return { valid: false, error: "Invalid winner count: #{params[:winner_count]}" }
+      return { valid: false, error: "Invalid winner count: #{params[:winner_count]}. Must be between 1 and #{SiteSetting.lottery_v2_max_winners}." }
     end
 
     condition_str = raw[/### 开奖条件\n(.*?)(?=\n### |\z)/m, 1]&.strip
@@ -148,7 +85,9 @@ class LotteryCreator
     formats.each do |format|
       begin
         parsed_time = DateTime.strptime(condition.strip, format).in_time_zone
-        parsed_time = parsed_time.change(year: Time.current.year) if !format.include?('%Y') && parsed_time < Time.current
+        if !format.include?('%Y') && parsed_time < Time.current
+          parsed_time = parsed_time.change(year: Time.current.year)
+        end
         return parsed_time if parsed_time > Time.current && parsed_time <= max_future_date
       rescue ArgumentError
         next
@@ -187,7 +126,8 @@ class LotteryCreator
   end
 
   def log_lottery_created(lottery)
-    Rails.logger.info("LOTTERY_CREATED: ID=#{lottery.id}, Topic=#{@topic.id}, Type=#{lottery.draw_type}, Condition=#{lottery.draw_at || lottery.draw_reply_count}")
+    condition = lottery.draw_at || lottery.draw_reply_count
+    Rails.logger.info("LOTTERY_CREATED: ID=#{lottery.id}, Topic=#{@topic.id}, Type=#{lottery.draw_type}, Condition=#{condition}")
   end
   
   def log_and_return(message, level)
