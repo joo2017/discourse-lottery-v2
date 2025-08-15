@@ -1,6 +1,6 @@
 # name: discourse-lottery-v2
 # about: A modern, automated lottery plugin for Discourse.
-# version: 2.7.0
+# version: 2.8.0
 # authors: Your Name (Revised by AI)
 # url: null
 
@@ -9,6 +9,9 @@ enabled_site_setting :lottery_v2_enabled
 register_asset "stylesheets/common/lottery.scss"
 
 after_initialize do
+  # 【重要】最终修正：在插件初始化时，强制加载所有Discourse核心依赖
+  require_dependency 'topic_changer'
+  
   require_dependency File.expand_path('../app/models/lottery.rb', __FILE__)
   
   Topic.class_eval do
@@ -41,12 +44,10 @@ after_initialize do
     end
   end
 
-  # 【重要】新增：当有新回复时，清除参与人数缓存
   on(:post_created) do |post, opts, user|
     topic = post.topic
     if topic&.lottery.present?
       lottery = topic.lottery
-      # 只有在抽奖进行中时才需要清除缓存
       if lottery.running?
         cache_key = "discourse_lottery_v2:participants:#{lottery.id}"
         Rails.cache.delete(cache_key)
