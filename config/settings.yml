@@ -6,10 +6,12 @@ plugins:
     default: ""
     client: false
     type: "string"
+    description: "Category IDs that trigger a lottery, separated by '|'. Leave empty for all."
   lottery_v2_trigger_tags:
     default: ""
     client: false
     type: "string"
+    description: "Tag names that trigger a lottery, separated by '|'. Leave empty for all."
   lottery_v2_floor_fallback:
     default: "void"
     client: false
@@ -17,40 +19,47 @@ plugins:
     choices:
       - void
       - next
+    description: "Action to take if a specified winning floor is invalid."
   lottery_v2_max_winners:
     default: 50
     client: false
     type: "integer"
     min: 1
     max: 100
+    description: "Maximum number of winners allowed for a single lottery."
   lottery_v2_min_participants:
     default: 2
     client: false
     type: "integer"
     min: 1
+    description: "Minimum number of participants required to perform a draw. If not met, the lottery will be cancelled."
   lottery_v2_auto_close_topic:
     default: true
     client: false
     type: "bool"
+    description: "Automatically close the topic after the lottery is drawn."
   lottery_v2_send_notifications:
     default: true
     client: false
     type: "bool"
+    description: "Send private messages to winners."
   lottery_v2_cache_duration:
     default: 60
     client: false
     type: "integer"
-    description: "Duration in seconds for caching participant count."
     min: 30
     max: 3600
+    description: "Duration in seconds for caching the participant count to reduce database load."
   lottery_v2_allowed_trust_levels:
     default: "1|2|3|4"
     client: false
     type: "list"
     list_type: "integer"
+    description: "Trust levels of users who are allowed to create lotteries."
   lottery_v2_max_future_days:
     default: 365
     client: false
     type: "integer"
     min: 1
     max: 3650
+    description: "Maximum number of days in the future a time-based lottery can be set."
