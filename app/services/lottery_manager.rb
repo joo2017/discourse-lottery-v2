@@ -7,8 +7,11 @@ class LotteryManager
   def perform_draw
     return unless @lottery.running?
     
-    if @lottery.participating_user_count < SiteSetting.lottery_v2_min_participants
-      return handle_no_winners("Not enough participants. Required: #{SiteSetting.lottery_v2_min_participants}, Actual: #{@lottery.participating_user_count}")
+    participant_count = @lottery.participating_user_count
+    min_participants = SiteSetting.lottery_v2_min_participants
+    
+    if participant_count < min_participants
+      return handle_no_winners("Not enough participants. Required: #{min_participants}, Actual: #{participant_count}")
     end
 
     begin
@@ -114,10 +117,16 @@ class LotteryManager
     end
   end
 
+  # 【重要】修正：使用新的 DiscourseTagging API
   def update_topic
-    current_tags = @topic.tags.pluck(:name)
-    new_tags = (current_tags - ["抽奖中"]) + ["已开奖"]
-    DiscourseTagging.synchronize_tags(@topic, Tag.where(name: new_tags), Guardian.new(Discourse.system_user))
+    guardian = Guardian.new(Discourse.system_user)
+    tag_names_to_add = ["已开奖"]
+    tag_names_to_remove = ["抽奖中"]
+
+    # 使用新的、更可靠的 API
+    DiscourseTagging.add_tags(tag_names_to_add, @topic, guardian)
+    DiscourseTagging.remove_tags(tag_names_to_remove, @topic, guardian)
+    
     @topic.update!(closed: true)
   end
 
