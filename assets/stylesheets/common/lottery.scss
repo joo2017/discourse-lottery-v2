@@ -48,28 +48,6 @@
     }
   }
 
-  .lottery-progress {
-    margin-bottom: 1.2em;
-    .progress-label {
-      font-size: var(--font-down-1);
-      color: var(--primary-medium);
-      display: block;
-      margin-bottom: 0.4em;
-    }
-    .progress-bar-container {
-      background-color: var(--primary-very-low);
-      border-radius: 10px;
-      height: 8px;
-      overflow: hidden;
-    }
-    .progress-bar-value {
-      background-color: var(--tertiary);
-      height: 100%;
-      border-radius: 10px;
-      transition: width 0.3s ease-in-out;
-    }
-  }
-
   .lottery-winners {
     margin-top: 1em;
     padding-top: 1em;
