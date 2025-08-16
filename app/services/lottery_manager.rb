@@ -11,19 +11,24 @@ class LotteryManager
     Rails.cache.delete(cache_key)
     participant_count = @lottery.participating_user_count
 
-    min_participants = SiteSetting.lottery_v2_min_participants
-    
-    if participant_count < min_participants
-      return handle_no_winners("Not enough participants. Required: #{min_participants}, Actual: #{participant_count}")
+    if participant_count < @lottery.min_participants_user
+      if @lottery.insufficient_participants_action_name == :cancel
+        return handle_cancellation("人数不足，活动取消。要求: #{@lottery.min_participants_user}, 实际: #{participant_count}")
+      end
     end
 
     begin
       Lottery.transaction do
         winners = find_winners
-        return handle_no_winners("No valid participants found after filtering") if winners.blank?
+        
+        if winners.blank?
+          return handle_cancellation("没有有效的获奖者，活动取消。")
+        end
         
         validated_winners = validate_winners(winners)
-        return handle_no_winners("No valid winners after validation (e.g., suspended users)") if validated_winners.blank?
+        if validated_winners.blank?
+          return handle_cancellation("所有潜在中奖者都无效（例如账户已封禁），活动取消。")
+        end
 
         update_lottery(validated_winners)
         announce_winners(validated_winners)
@@ -40,7 +45,11 @@ class LotteryManager
   private
   
   def find_winners
-    @lottery.specific_floors.present? ? find_winners_by_floor : find_winners_by_random
+    if @lottery.specific_floor?
+      find_winners_by_floor
+    else
+      find_winners_by_random
+    end
   end
 
   def find_winners_by_random
@@ -121,19 +130,18 @@ class LotteryManager
   end
 
   def update_topic
-    # 使用最原始、最可靠的方式来修改标签
-    tag_to_add = Tag.find_or_create_by!(name: "已开奖")
-    tag_to_remove = Tag.find_by(name: "抽奖中")
-    current_tags = @topic.tags.to_a
-    final_tags = current_tags
-    final_tags.delete(tag_to_remove) if tag_to_remove
-    final_tags << tag_to_add unless final_tags.include?(tag_to_add)
-    @topic.tags = final_tags.uniq
-    @topic.save!
+    acting_user = Discourse.system_user
+    topic_changer = ::TopicChanger.new(@topic, acting_user)
+    
+    current_tags = @topic.tags.pluck(:name)
+    final_tags = (current_tags - ["抽奖中"]) + ["已开奖"]
+    
+    topic_changer.change_tags(final_tags.uniq)
+    
     @topic.update!(closed: true)
   end
 
-  def handle_no_winners(reason)
+  def handle_cancellation(reason)
     @lottery.update!(status: Lottery::STATUSES[:cancelled])
     announce_cancellation
     create_audit_log('draw_cancelled', { reason: reason })
