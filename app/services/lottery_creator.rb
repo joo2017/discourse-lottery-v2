@@ -6,7 +6,7 @@ class LotteryCreator
   end
 
   def create_from_template
-    return log_and_return("Lottery already exists", :info) if Lottery.exists?(topic_id: @topic.id)
+    return log_and_return("抽奖已存在", :info) if Lottery.exists?(topic_id: @topic.id)
     
     begin
       raw = @post.raw
@@ -15,7 +15,7 @@ class LotteryCreator
       validation_result = validate_params(params)
       return log_and_return(validation_result[:error], :warn) unless validation_result[:valid]
 
-      lottery = create_lottery_record(params, validation_result[:draw_condition])
+      lottery = create_lottery_record(params)
       
       if lottery&.persisted?
         add_tag("抽奖中")
@@ -37,84 +37,74 @@ class LotteryCreator
       case key
       when "抽奖名称" then params[:name] = value
       when "活动奖品" then params[:prize] = value
-      when "获奖人数" then params[:winner_count] = value.to_i
-      when "开奖方式" then params[:draw_type] = value == "时间开奖" ? :by_time : (value == "回复数开奖" ? :by_reply : nil)
-      when "开奖条件" then params[:draw_condition_str] = value
-      when "指定中奖楼层 (可选)" then params[:specific_floors] = value
-      when "简单说明 (可选)" then params[:description] = value
-      when "其他说明 (可选)" then params[:extra_info] = value
+      when "获奖人数" then params[:winner_count] = value
+      when "指定中奖楼层" then params[:specific_floors] = value
+      when "开奖时间" then params[:draw_at_str] = value
+      when "最低参与人数" then params[:min_participants_user] = value
+      when "开奖时人数不足的处理方式" then params[:insufficient_action_str] = value
+      when "简单说明" then params[:description] = value
       end
     end
     params
   end
 
   def validate_params(params)
-    required_keys = [:name, :prize, :winner_count, :draw_type, :draw_condition_str]
+    required_keys = %i[name prize draw_at_str min_participants_user insufficient_action_str]
     missing_keys = required_keys.select { |key| params[key].blank? }
-    return { valid: false, error: "Missing required fields: #{missing_keys.join(', ')}" } if missing_keys.any?
+    return { valid: false, error: "缺少必填字段: #{missing_keys.join(', ')}" } if missing_keys.any?
 
-    if params[:winner_count] <= 0 || params[:winner_count] > SiteSetting.lottery_v2_max_winners
-      return { valid: false, error: "Invalid winner count: #{params[:winner_count]}. Must be between 1 and #{SiteSetting.lottery_v2_max_winners}." }
-    end
-
-    parsed_condition = parse_draw_condition(params[:draw_condition_str], params[:draw_type])
-    
-    return { valid: false, error: "Invalid draw condition: #{params[:draw_condition_str]}" } if parsed_condition.nil?
-
-    { valid: true, draw_condition: parsed_condition }
-  end
-
-  def parse_draw_condition(condition_str, draw_type)
-    return nil if condition_str.blank?
-    case draw_type
-    when :by_time then parse_time_condition(condition_str)
-    when :by_reply then parse_reply_condition(condition_str)
-    end
-  end
-
-  def parse_time_condition(condition)
-    formats = ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y/%m/%d %H:%M', '%m-%d %H:%M', '%m/%d %H:%M']
-    max_future_date = Time.current.advance(days: SiteSetting.lottery_v2_max_future_days)
-    
-    formats.each do |format|
-      begin
-        parsed_time = DateTime.strptime(condition.strip, format).in_time_zone
-        if !format.include?('%Y') && parsed_time < Time.current
-          parsed_time = parsed_time.change(year: Time.current.year)
-        end
-        return parsed_time if parsed_time > Time.current && parsed_time <= max_future_date
-      rescue ArgumentError
-        next
+    is_specific_floor = params[:specific_floors].present?
+    if is_specific_floor
+      if params[:specific_floors].split(/[,，\s]+/).map(&:to_i).any? { |f| f <= 1 }
+        return { valid: false, error: "指定楼层必须大于1" }
       end
+    elsif params[:winner_count].blank? || params[:winner_count].to_i <= 0
+      return { valid: false, error: "随机抽奖时，获奖人数必须填写且大于0" }
     end
-    nil
+
+    if params[:winner_count].to_i > SiteSetting.lottery_v2_max_winners
+      return { valid: false, error: "获奖人数不能超过管理员设置的最大值 (#{SiteSetting.lottery_v2_max_winners})" }
+    end
+    
+    admin_min_participants = SiteSetting.lottery_v2_min_participants_admin
+    if params[:min_participants_user].to_i < admin_min_participants
+      return { valid: false, error: "最低参与人数不能低于管理员设置的底线 (#{admin_min_participants})" }
+    end
+
+    if Time.zone.parse(params[:draw_at_str]).nil?
+      return { valid: false, error: "开奖时间格式无效" }
+    end
+
+    { valid: true }
   end
 
-  def parse_reply_condition(condition)
-    reply_count = condition.to_i
-    reply_count > 0 ? reply_count : nil
-  end
+  def create_lottery_record(params)
+    draw_type = params[:specific_floors].present? ? :specific_floor : :random
+    
+    winner_count = if draw_type == :specific_floor
+                     params[:specific_floors].split(/[,，\s]+/).map(&:strip).uniq.count
+                   else
+                     params[:winner_count].to_i
+                   end
+    
+    insufficient_action = params[:insufficient_action_str] == "继续开奖" ? :draw_anyway : :cancel
 
-  def create_lottery_record(params, draw_condition)
     lottery_params = {
       topic_id: @topic.id, post_id: @post.id, created_by_id: @user.id,
-      name: params[:name], prize: params[:prize], winner_count: params[:winner_count],
-      draw_type: Lottery::DRAW_TYPES[params[:draw_type]], 
+      name: params[:name], prize: params[:prize],
+      winner_count: winner_count,
+      draw_type: Lottery::DRAW_TYPES[draw_type],
+      draw_at: Time.zone.parse(params[:draw_at_str]),
       specific_floors: params[:specific_floors],
-      description: params[:description], extra_info: params[:extra_info], 
+      description: params[:description],
+      min_participants_user: params[:min_participants_user].to_i,
+      insufficient_participants_action: Lottery::INSUFFICIENT_PARTICIPANTS_ACTIONS[insufficient_action],
       status: Lottery::STATUSES[:running]
     }
-    lottery_params[:draw_at] = draw_condition if params[:draw_type] == :by_time
-    lottery_params[:draw_reply_count] = draw_condition if params[:draw_type] == :by_reply
     
-    Lottery.transaction do
-      lottery = Lottery.create!(lottery_params)
-      create_audit_log(lottery, 'created')
-      lottery
-    end
-  rescue ActiveRecord::RecordInvalid => e
-    log_and_return("Validation failed: #{e.message}", :error)
-    nil
+    lottery = Lottery.create!(lottery_params)
+    create_audit_log(lottery, 'created')
+    lottery
   end
   
   def add_tag(tag_name)
@@ -122,8 +112,7 @@ class LotteryCreator
   end
 
   def log_lottery_created(lottery)
-    condition = lottery.draw_at || lottery.draw_reply_count
-    Rails.logger.info("LOTTERY_CREATED: ID=#{lottery.id}, Topic=#{@topic.id}, Type=#{lottery.draw_type_name}, Condition=#{condition}")
+    Rails.logger.info("LOTTERY_CREATED: ID=#{lottery.id}, Topic=#{@topic.id}, Type=#{lottery.draw_type_name}, DrawAt=#{lottery.draw_at}")
   end
   
   def log_and_return(message, level)
@@ -132,6 +121,6 @@ class LotteryCreator
   end
 
   def create_audit_log(lottery, action)
-    Rails.logger.info("LOTTERY_AUDIT: lottery_id=#{lottery.id}, action=#{action}, user_id=#{@user.id}, topic_id=#{@topic.id}")
+    Rails.logger.info("LOTTERY_AUDIT: lottery_id=#{lottery.id}, action=#{action}, user_id=#{@user.id}")
   end
 end
