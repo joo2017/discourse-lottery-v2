@@ -6,31 +6,18 @@ class Lottery < ActiveRecord::Base
 
   # --- 手动实现 Enum 功能以确保兼容性 ---
   STATUSES = { running: 0, finished: 1, cancelled: 2 }.with_indifferent_access.freeze
-  DRAW_TYPES = { by_time: 1, by_reply: 2 }.with_indifferent_access.freeze
+  DRAW_TYPES = { random: 1, specific_floor: 2 }.with_indifferent_access.freeze
+  INSUFFICIENT_PARTICIPANTS_ACTIONS = { draw_anyway: 0, cancel: 1 }.with_indifferent_access.freeze
 
-  STATUSES.each_key do |status_name|
-    scope status_name, -> { where(status: STATUSES[status_name]) }
-  end
+  scope :running, -> { where(status: STATUSES[:running]) }
 
-  def status_name
-    STATUSES.key(self.status)
-  end
+  def status_name; STATUSES.key(self.status); end
+  STATUSES.each_key { |name| define_method("#{name}?") { self.status == STATUSES[name] } }
 
-  STATUSES.each_key do |status_name|
-    define_method("#{status_name}?") do
-      self.status == STATUSES[status_name]
-    end
-  end
+  def draw_type_name; DRAW_TYPES.key(self.draw_type); end
+  DRAW_TYPES.each_key { |name| define_method("#{name}?") { self.draw_type == DRAW_TYPES[name] } }
 
-  def draw_type_name
-    DRAW_TYPES.key(self.draw_type)
-  end
-
-  DRAW_TYPES.each_key do |type_name|
-    define_method("#{type_name}?") do
-      self.draw_type == DRAW_TYPES[type_name]
-    end
-  end
+  def insufficient_participants_action_name; INSUFFICIENT_PARTICIPANTS_ACTIONS.key(self.insufficient_participants_action); end
   # --- Enum 手动实现结束 ---
 
   def participating_user_count
