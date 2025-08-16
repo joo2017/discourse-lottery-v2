@@ -6,12 +6,12 @@ plugins:
     default: ""
     client: false
     type: "string"
-    description: "Category IDs that trigger a lottery, separated by '|'. Leave empty for all."
+    description: "触发抽奖的分类ID，使用'|'分隔。留空则适用于所有分类。"
   lottery_v2_trigger_tags:
     default: ""
     client: false
     type: "string"
-    description: "Tag names that trigger a lottery, separated by '|'. Leave empty for all."
+    description: "触发抽奖的标签名，使用'|'分隔。留空则适用于所有标签。"
   lottery_v2_floor_fallback:
     default: "void"
     client: false
@@ -19,41 +19,41 @@ plugins:
     choices:
       - void
       - next
-    description: "Action to take if a specified winning floor is invalid."
+    description: "当指定的楼层无效时（例如楼层由楼主发布，或不存在）的处理方式。"
   lottery_v2_max_winners:
     default: 50
     client: false
     type: "integer"
     min: 1
     max: 100
-    description: "Maximum number of winners allowed for a single lottery."
-  lottery_v2_min_participants:
-    default: 2
+    description: "单次随机抽奖允许的最大获奖人数。"
+  lottery_v2_min_participants_admin:
+    default: 1
     client: false
     type: "integer"
     min: 1
-    description: "Minimum number of participants required to perform a draw. If not met, the lottery will be cancelled."
+    description: "任何抽奖所需的绝对最低参与人数。用户无法设置比此更低的值。"
   lottery_v2_auto_close_topic:
     default: true
     client: false
     type: "bool"
-    description: "Automatically close the topic after the lottery is drawn."
+    description: "抽奖结束后自动锁定主题。"
   lottery_v2_send_notifications:
     default: true
     client: false
     type: "bool"
-    description: "Send private messages to winners."
+    description: "向中奖用户发送私人消息。"
   lottery_v2_cache_duration:
     default: 60
     client: false
     type: "integer"
     min: 30
     max: 3600
-    description: "Duration in seconds for caching the participant count to reduce database load."
+    description: "参与人数统计的缓存时间（秒），用于降低数据库负载。"
   lottery_v2_max_future_days:
     default: 365
     client: false
     type: "integer"
     min: 1
     max: 3650
-    description: "Maximum number of days in the future a time-based lottery can be set."
+    description: "允许设置的未来最远开奖天数。"
