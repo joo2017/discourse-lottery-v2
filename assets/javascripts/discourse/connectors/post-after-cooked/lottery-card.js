@@ -10,7 +10,7 @@ export default class LotteryCard extends Component {
 
   constructor() {
     super(...arguments);
-    if (this.isRunning && this.lotteryData?.draw_type === "by_time") {
+    if (this.isRunning) {
       this.startCountdown();
     }
   }
@@ -37,35 +37,16 @@ export default class LotteryCard extends Component {
   get isFinished() { return this.lotteryData?.status === "finished"; }
   get isCancelled() { return this.lotteryData?.status === "cancelled"; }
 
-  get drawConditionText() {
+  get drawTimeText() {
     try {
-      if (!this.lotteryData) return "";
-      
-      if (this.lotteryData.draw_type === "by_time" && this.lotteryData.draw_at) {
-        const date = new Date(this.lotteryData.draw_at);
-        if (isNaN(date.getTime())) return I18n.t("lottery_v2.errors.invalid_date");
-        const baseText = I18n.t("lottery_v2.draw_condition.by_time", { time: date.toLocaleString() });
-        return this.timeRemaining && this.isRunning ? `${baseText} (${this.timeRemaining})` : baseText;
-
-      } else if (this.lotteryData.draw_type === "by_reply") {
-        const current = this.lotteryData.participating_user_count || 0;
-        const target = this.lotteryData.draw_reply_count;
-        return I18n.t("lottery_v2.draw_condition.by_reply_with_progress", { current, target });
-      }
+      if (!this.lotteryData?.draw_at) return "";
+      const date = new Date(this.lotteryData.draw_at);
+      if (isNaN(date.getTime())) return I18n.t("lottery_v2.errors.invalid_date");
+      const baseText = I18n.t("lottery_v2.details.draw_time", { time: date.toLocaleString() });
+      return this.timeRemaining && this.isRunning ? `${baseText} (${this.timeRemaining})` : baseText;
     } catch (e) {
-      console.error("Error formatting draw condition:", e);
       return I18n.t("lottery_v2.errors.condition_format_error");
     }
-    return "";
-  }
-
-  get progressPercentage() {
-    if (this.lotteryData?.draw_type === "by_reply" && this.lotteryData.draw_reply_count > 0) {
-      const current = this.lotteryData.participating_user_count || 0;
-      const target = this.lotteryData.draw_reply_count;
-      return Math.min((current / target) * 100, 100);
-    }
-    return 0;
   }
   
   get hasWinners() {
