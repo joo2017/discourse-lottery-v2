@@ -1,15 +1,15 @@
 zh_CN:
   site_settings:
-    lottery_v2_enabled: "启用新版抽奖插件 (V2)。"
-    lottery_v2_trigger_categories: "触发抽奖的分类ID，使用'|'分隔。留空则适用于所有分类。"
-    lottery_v2_trigger_tags: "触发抽奖的标签名，使用'|'分隔。留空则适用于所有标签。"
-    lottery_v2_floor_fallback: "当指定的中奖楼层无效时（例如楼层由楼主发布或不存在）的处理方式。"
-    lottery_v2_max_winners: "单次抽奖允许的最大获奖人数。"
-    lottery_v2_min_participants: "执行开奖所需的最低参与人数。如果未达到，抽奖将被取消。"
+    lottery_v2_enabled: "启用新版抽奖插件 (V3)。"
+    lottery_v2_trigger_categories: "触发抽奖的分类ID，使用'|'分隔。"
+    lottery_v2_trigger_tags: "触发抽奖的标签名，使用'|'分隔。"
+    lottery_v2_floor_fallback: "当指定的楼层无效时的处理方式。"
+    lottery_v2_max_winners: "随机抽奖的最大获奖人数。"
+    lottery_v2_min_participants_admin: "全局最低参与人数。用户设置的值不能低于此值。"
     lottery_v2_auto_close_topic: "抽奖结束后自动锁定主题。"
-    lottery_v2_send_notifications: "向中奖用户发送私人消息通知。"
-    lottery_v2_cache_duration: "参与人数统计的缓存时间（秒），用于降低数据库负载。"
-    lottery_v2_max_future_days: "允许设置的未来最远开奖天数（针对时间开奖）。"
+    lottery_v2_send_notifications: "向中奖用户发送私信。"
+    lottery_v2_cache_duration: "参与人数的缓存时间（秒）。"
+    lottery_v2_max_future_days: "允许设置的未来最远开奖天数。"
   lottery_v2:
     status:
       running: "抽奖进行中"
@@ -18,12 +18,10 @@ zh_CN:
     details:
       prize: "活动奖品"
       winners_count: "获奖人数"
-      draw_condition: "开奖条件"
+      draw_time_label: "开奖时间"
+      draw_time: "开奖于: %{time}"
       participants: "参与人数"
-    draw_condition:
-      by_time: "开奖时间: %{time}"
-      by_reply: "回复达到 %{count} 时开奖"
-      by_reply_with_progress: "回复达到 %{target} 时开奖 (当前: %{current})"
+      min_participants: "最低参与人数"
     countdown:
       finished: "开奖时间已到"
       days: "%{days}天 %{hours}小时"
@@ -33,17 +31,11 @@ zh_CN:
       title: "🎉 开奖结果"
       winners_are: "恭喜以下用户中奖："
       no_participants: "很遗憾，本次抽奖因参与人数不足，活动已自动取消。"
-      cancelled: "本次抽奖活动已取消。"
     notification:
       won_lottery_title: "🎉 您中奖啦！"
       won_lottery: |
-        恭喜您！您在主题中赢得了 “%{lottery_name}” 抽奖活动！
-
-        [%{topic_title}](%{topic_url})
-        
+        恭喜您！您在主题 “%{topic_title}” 中赢得了 “%{lottery_name}” 抽奖活动！
         请及时联系活动组织者领取奖品。
     errors:
       invalid_date: "开奖时间格式错误"
       condition_format_error: "开奖条件显示错误"
-    progress:
-      participation_progress: "参与进度"
