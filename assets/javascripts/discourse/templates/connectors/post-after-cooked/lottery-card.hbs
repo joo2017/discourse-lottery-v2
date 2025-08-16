@@ -23,23 +23,15 @@
       <span class="label">{{i18n "lottery_v2.details.winners_count"}}:</span>
       <span class="value">{{this.lotteryData.winner_count}}</span>
       
-      <span class="label">{{i18n "lottery_v2.details.draw_condition"}}:</span>
-      <span class="value">{{this.drawConditionText}}</span>
+      <span class="label">{{i18n "lottery_v2.details.draw_time_label"}}:</span>
+      <span class="value">{{this.drawTimeText}}</span>
 
       <span class="label">{{i18n "lottery_v2.details.participants"}}:</span>
       <span class="value">{{this.lotteryData.participating_user_count}}</span>
+      
+      <span class="label">{{i18n "lottery_v2.details.min_participants"}}:</span>
+      <span class="value">{{this.lotteryData.min_participants_user}}</span>
     </div>
-
-    {{#if this.isRunning}}
-      {{#if (eq this.lotteryData.draw_type "by_reply")}}
-        <div class="lottery-progress">
-          <span class="progress-label">{{i18n "lottery_v2.progress.participation_progress"}}</span>
-          <div class="progress-bar-container">
-            <div class="progress-bar-value" style={{html-safe (concat "width: " this.progressPercentage "%;")}}></div>
-          </div>
-        </div>
-      {{/if}}
-    {{/if}}
 
     {{#if this.hasWinners}}
       <div class="lottery-winners">
