@@ -1,6 +1,6 @@
 # name: discourse-lottery-v2
-# about: A modern, automated lottery plugin for Discourse.
-# version: 2.9.0
+# about: A modern, automated lottery plugin for Discourse based on time.
+# version: 3.0.0
 # authors: Your Name (Revised by AI)
 # url: null
 
@@ -9,12 +9,18 @@ enabled_site_setting :lottery_v2_enabled
 register_asset "stylesheets/common/lottery.scss"
 
 after_initialize do
+  # 加载Discourse核心依赖
+  require_dependency 'topic_changer'
+  
+  # 加载插件自身的模型
   require_dependency File.expand_path('../app/models/lottery.rb', __FILE__)
   
+  # 为Topic模型添加关联
   Topic.class_eval do
     has_one :lottery, class_name: "Lottery", dependent: :destroy
   end
 
+  # 加载插件的所有服务和任务
   [
     '../app/services/lottery_creator.rb',
     '../app/services/lottery_manager.rb',
@@ -22,6 +28,7 @@ after_initialize do
     '../jobs/regular/create_lottery_from_topic.rb'
   ].each { |path| require_dependency File.expand_path(path, __FILE__) }
   
+  # 监听主题创建事件，用于触发抽奖创建流程
   on(:topic_created) do |topic, opts, user|
     if SiteSetting.lottery_v2_enabled
       trigger_categories_setting = SiteSetting.lottery_v2_trigger_categories
@@ -41,6 +48,7 @@ after_initialize do
     end
   end
 
+  # 监听新回复事件，用于清除参与人数缓存
   on(:post_created) do |post, opts, user|
     topic = post.topic
     if topic&.lottery.present?
@@ -52,6 +60,7 @@ after_initialize do
     end
   end
 
+  # 扩展TopicViewSerializer，向前端注入抽奖数据
   require_dependency "topic_view_serializer"
   class ::TopicViewSerializer
     attributes :lottery_data
@@ -62,15 +71,13 @@ after_initialize do
 
       lottery_json = lottery.as_json(
         only: [
-          :id,
-          :name, :prize, :winner_count, :draw_at,
-          :draw_reply_count, :specific_floors, :description,
-          :extra_info
+          :id, :name, :prize, :winner_count, :draw_at,
+          :specific_floors, :description, :extra_info,
+          :min_participants_user
         ],
         methods: [:participating_user_count]
       )
       
-      # Manually handle winner_data to ensure it's parsed JSON
       parsed_winner_data = begin
         JSON.parse(lottery.winner_data) if lottery.winner_data.is_a?(String) && lottery.winner_data.present?
       rescue JSON::ParserError
@@ -81,7 +88,8 @@ after_initialize do
 
       lottery_json.merge(
         status: lottery.status_name.to_s,
-        draw_type: lottery.draw_type_name.to_s
+        draw_type: lottery.draw_type_name.to_s,
+        insufficient_participants_action: lottery.insufficient_participants_action_name.to_s
       )
     end
     
