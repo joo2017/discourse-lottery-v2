@@ -8,21 +8,20 @@ class CreateLotteries < ActiveRecord::Migration[6.1]
       t.text :prize, null: false
       t.integer :winner_count, null: false, default: 1
       t.integer :draw_type, null: false
-      t.timestamp :draw_at
-      t.integer :draw_reply_count
+      t.timestamp :draw_at, null: false
       t.string :specific_floors
       t.text :description
       t.text :extra_info
       t.integer :status, null: false, default: 0
-      t.text :winner_data # 改为 text 以确保最大兼容性
+      t.integer :min_participants_user, null: false, default: 1
+      t.integer :insufficient_participants_action, null: false, default: 0 # 0: 继续开奖, 1: 取消
+      t.text :winner_data
       t.timestamps null: false
     end
 
     add_index :lotteries, :topic_id, unique: true
     add_index :lotteries, :status
     add_index :lotteries, :created_by_id
-    add_index :lotteries, :draw_at
     add_index :lotteries, [:status, :draw_at]
-    add_index :lotteries, [:status, :draw_reply_count]
   end
 end
